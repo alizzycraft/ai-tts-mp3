@@ -130,8 +130,7 @@ img[src*="/icons/"] {
 
 /* Global modal styling */
 .modal-backdrop,
-.modal-overlay,
-.removal-preview-modal {
+.modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -155,27 +154,18 @@ img[src*="/icons/"] {
   animation: modalSlideIn 0.2s ease-out;
   max-height: 80vh;
   overflow-y: auto;
-
-  // For modals with lists
-  .items-list {
-    max-height: 200px;
-    overflow-y: auto;
-    border: 1px solid #21262d;
-    border-radius: 6px;
-    background: #161b22;
-  }
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
+  padding: 1.5rem 1.5rem 1rem;
   border-bottom: 1px solid #21262d;
 
   h3 {
     color: #e6edf3;
-    font-size: 1.1rem;
+    font-size: 1.25rem;
     font-weight: 600;
     margin: 0;
   }
@@ -202,12 +192,13 @@ img[src*="/icons/"] {
 }
 
 .modal-body {
-  padding: 1rem;
-  color: #e6edf3;
-  
+  padding: 1.5rem;
+  text-align: center;
+
   p {
-    margin-bottom: 1rem;
-    font-size: 0.9rem;
+    color: #e6edf3;
+    font-size: 1rem;
+    margin: 0 0 0.75rem 0;
     line-height: 1.5;
   }
 
@@ -265,14 +256,14 @@ img[src*="/icons/"] {
 .modal-footer {
   display: flex;
   gap: 0.75rem;
+  padding: 1rem 1.5rem 1.5rem;
   justify-content: flex-end;
-  padding: 1rem;
-  border-top: 1px solid #21262d;
 }
 
 .modal-btn {
   padding: 0.5rem 1rem;
   border-radius: 6px;
+  border: none;
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -280,9 +271,8 @@ img[src*="/icons/"] {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  min-width: 100px;
+  min-width: 80px;
   justify-content: center;
-  border: 1px solid transparent;
 
   &:focus-visible {
     outline: 2px solid #1f6feb;
@@ -292,7 +282,7 @@ img[src*="/icons/"] {
   &.secondary {
     background: #21262d;
     color: #e6edf3;
-    border-color: #30363d;
+    border: 1px solid #30363d;
 
     &:hover {
       background: #30363d;
@@ -302,44 +292,25 @@ img[src*="/icons/"] {
 
   &.primary {
     background: #238636;
-    color: #ffffff;
-    border-color: #2ea043;
+    color: white;
+  }
 
-    &:hover {
-      background: #2ea043;
-      border-color: #3fb950;
-    }
+  &.primary:hover {
+    background: #2ea043;
   }
 
   &.danger {
-    background: #da3633;
-    color: #ffffff;
-    border-color: #f85149;
+    background: #21262d;
+    border: 1px solid var(--error-color);
+    color: #e6edf3;
 
     &:hover {
-      background: #f85149;
-      border-color: #ff6b6b;
+      background: rgba(218, 54, 51, 0.3);
+      border-color: var(--error-color);
+      color: #e6edf3;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(218, 54, 51, 0.2);
     }
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-  // Semantic button variants
-  &.cancel {
-    @extend .modal-btn;
-    @extend .secondary;
-  }
-
-  &.proceed {
-    @extend .modal-btn;
-    @extend .primary;
-  }
-
-  &.delete {
-    @extend .modal-btn;
-    @extend .danger;
   }
 }
 

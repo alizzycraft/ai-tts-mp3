@@ -1,9 +1,10 @@
 // Google Cloud Text-to-Speech provider implementation
-import { Injectable, signal, computed, effect } from '@angular/core';
+import { Injectable, signal, computed, Inject, PLATFORM_ID } from '@angular/core';
 import { LoggingService } from '../logging.service';
-import { MonitoringService } from '../monitoring.service';
 import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus } from '../../domain/tts.entity';
 import { Result } from '../../common/result';
+import { ProviderHealthMetrics, ProviderMonitoringService } from '../monitoring/provider-monitoring.service';
+import { isPlatformBrowser } from '@angular/common';
 
 export interface GoogleVoice {
   languageCodes: string[];
@@ -49,37 +50,54 @@ export class GoogleTTSService {
   private isValidated = signal<boolean>(false);
   private synthesisCount = signal<number>(0);
   private errorCount = signal<number>(0);
+  private lastCheckTime = signal<Date>(new Date());
+  private healthCheckInterval = signal(60000); // 1 minute
+  private readonly initialized = signal(false);
 
   // Computed reactive properties
   readonly voicesCount = computed(() => this.cachedVoices()?.length || 0);
+  
   readonly successRate = computed(() => {
     const total = this.synthesisCount() + this.errorCount();
     return total > 0 ? (this.synthesisCount() / total) * 100 : 0;
   });
-  readonly providerStatus = computed(() => {
-    if (!this.isValidated()) return 'not-validated';
-    if (this.errorCount() > this.synthesisCount()) return 'degraded';
-    return 'healthy';
+
+  readonly providerHealth = computed(() => {
+    const status = this.providerStatus();
+    const rate = this.successRate();
+      
+    if (status === 'degraded') {
+      this.logging.warn('Google provider performance degraded', 'Google', {
+        successRate: rate,
+        totalRequests: this.synthesisCount(),
+        errors: this.errorCount()
+      });
+    }
+    
+    this.updateProviderHealth();
+    
+    return {
+      status: this.providerStatus(),
+      successRate: this.successRate(),
+      requestCount: this.synthesisCount()
+    };
   });
 
-  constructor(
+  readonly providerStatus = computed(() => {
+    if (!this.isValidated()) return 'not-validated';
+    const rate = this.successRate();
+    if (rate >= 95) return 'healthy';
+    if (rate >= 80) return 'degraded';
+    return 'unhealthy';
+  });  constructor(
     private logging: LoggingService,
-    private monitoring: MonitoringService
+    private providerMonitoring: ProviderMonitoringService,
+    @Inject(PLATFORM_ID) private platformId: object
   ) {
-    this.logging.info('GoogleTTSService initialized', 'Google');
-
-    // Effects for reactive behaviors
-    effect(() => {
-      // Monitor provider health
-      const status = this.providerStatus();
-      if (status === 'degraded') {
-        this.logging.warn(`Google provider status: ${status}`, 'Google', {
-          synthesisCount: this.synthesisCount(),
-          errorCount: this.errorCount(),
-          successRate: this.successRate()
-        });
-      }
-    });
+    if (!this.initialized() && isPlatformBrowser(this.platformId)) {
+      this.initialized.set(true);
+      this.logging.info('GoogleTTSService initialized', 'Google');
+    }
   }
 
   // Core TTS functionality
@@ -107,8 +125,10 @@ export class GoogleTTSService {
           const audioData = await this.makeTextToSpeechRequest(text, settings);
           const processingTime = Date.now() - startTime;
 
-          this.monitoring.recordRequest('google_synthesis', processingTime, true, ModelProvider.GOOGLE);
-          this.synthesisCount.update(count => count + 1);          const result: TTSResult = {
+          this.synthesisCount.update(count => count + 1);
+          this.updateProviderHealth();
+
+          const result: TTSResult = {
             queryId,
             status: TTSResultStatus.COMPLETED,
             createdAt: new Date(),
@@ -129,11 +149,13 @@ export class GoogleTTSService {
 
         } catch (error) {
           const processingTime = Date.now() - startTime;
-          this.monitoring.recordRequest('google_synthesis', processingTime, false, ModelProvider.GOOGLE);
           this.errorCount.update(count => count + 1);
+          this.updateProviderHealth();
 
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-          this.logging.error('Google synthesis failed', error as Error, 'Google');          const result: TTSResult = {
+          this.logging.error('Google synthesis failed', error as Error, 'Google');
+
+          const result: TTSResult = {
             queryId,
             status: TTSResultStatus.FAILED,
             createdAt: new Date(),
@@ -152,6 +174,7 @@ export class GoogleTTSService {
       'Google'
     );
   }
+
   // Voice management
   async getAvailableVoices(apiKey: string): Promise<Result<GoogleVoice[], string>> {
     if (this.cachedVoices()) {
@@ -170,7 +193,9 @@ export class GoogleTTSService {
 
           if (!response.ok) {
             throw new Error(`Failed to fetch voices: ${response.status} ${response.statusText}`);
-          }          const data = await response.json();
+          }
+
+          const data = await response.json();
           this.cachedVoices.set(data.voices);
 
           this.logging.info(`Retrieved ${this.cachedVoices()!.length} Google voices`, 'Google');
@@ -243,12 +268,18 @@ export class GoogleTTSService {
   // Validation and capabilities
   async validateConfiguration(settings: TTSSettings): Promise<Result<boolean, string>> {
     if (!settings.apiKey) {
+      this.isValidated.set(false);
       return Result.failure('API key is required');
-    }    // Test API key by fetching voices
+    }
+
+    // Test API key by fetching voices
     const voicesResult = await this.getAvailableVoices(settings.apiKey.getValue());
     if (voicesResult.isFailure()) {
+      this.isValidated.set(false);
       return Result.failure(`Invalid API key: ${voicesResult.getError()}`);
-    }    this.logging.info('Google configuration validated successfully', 'Google');
+    }
+
+    this.logging.info('Google configuration validated successfully', 'Google');
     this.isValidated.set(true);
     return Result.success(true);
   }
@@ -288,6 +319,7 @@ export class GoogleTTSService {
   getVoicesByGender(voices: GoogleVoice[], gender: 'MALE' | 'FEMALE' | 'NEUTRAL'): GoogleVoice[] {
     return voices.filter(voice => voice.ssmlGender === gender);
   }
+
   // Clear caches
   clearCache(): void {
     this.cachedVoices.set(null);
@@ -351,6 +383,23 @@ export class GoogleTTSService {
   private estimateAudioDuration(audioData: Uint8Array): number {
     // Rough estimation for MP3: assumes 64kbps bitrate (Google default)
     const bytesPerSecond = 64 * 1024 / 8; // 64kbps in bytes per second
-    return audioData.byteLength / bytesPerSecond;
+    return Math.round(audioData.byteLength / bytesPerSecond);
+  }
+
+  private updateProviderHealth(): void {
+    const status = !this.isValidated() ? "unconfigured" as const
+      : this.successRate() < 80 ? "unhealthy" as const
+      : this.successRate() < 95 ? "degraded" as const
+      : "healthy" as const;
+
+    const metrics: ProviderHealthMetrics = {
+      synthesisCount: this.synthesisCount(),
+      errorCount: this.errorCount(),
+      successRate: this.successRate(),
+      lastCheckTime: this.lastCheckTime(),
+      status
+    };
+
+    this.providerMonitoring.updateProviderMetrics(ModelProvider.GOOGLE, metrics);
   }
 }

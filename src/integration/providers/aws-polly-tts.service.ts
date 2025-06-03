@@ -1,10 +1,11 @@
 // AWS Polly TTS provider implementation
-import { Injectable, signal, computed, effect } from '@angular/core';
+import { Injectable, signal, computed, Inject, PLATFORM_ID } from '@angular/core';
 import { LoggingService } from '../logging.service';
-import { MonitoringService } from '../monitoring/monitoring.service';
 import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus } from '../../domain/tts.entity';
 import { Result } from '../../common/result';
 import { ApiKey } from '../../domain/value-objects/api-key';
+import { ProviderHealthMetrics, ProviderMonitoringService } from '../monitoring/provider-monitoring.service';
+import { isPlatformBrowser } from '@angular/common';
 
 export interface AWSVoice {
   id: string;
@@ -17,11 +18,11 @@ export interface AWSVoice {
   additionalLanguageCodes?: string[];
 }
 
-export interface AWSPollySettings extends TTSSettings {
-  readonly accessKeyId?: ApiKey;
-  readonly secretKey?: ApiKey;
-  readonly region?: string;
-  readonly customEndpoint?: string;
+export interface AWSPollySettings extends Omit<TTSSettings, 'apiKey'> {
+  apiKey?: ApiKey;
+  secretKey?: ApiKey;
+  region?: string;
+  customEndpoint?: string;
 }
 
 export interface AWSPollyRequest {
@@ -60,6 +61,8 @@ export class AWSPollyTTSService {
   private isValidated = signal(false);
   private synthesisCount = signal(0);
   private errorCount = signal(0);
+  private lastCheckTime = signal<Date>(new Date());
+  private initialized = signal(false);
   
   // Computed signals for reactive analytics
   readonly voicesCount = computed(() => this.cachedVoices()?.length ?? 0);
@@ -68,37 +71,52 @@ export class AWSPollyTTSService {
     const errors = this.errorCount();
     return total > 0 ? ((total - errors) / total) * 100 : 0;
   });
+
+  readonly cacheStatus = computed(() => {
+    const voices = this.cachedVoices();
+    const credentials = this.cachedCredentials();
+    return {
+      hasVoices: !!voices,
+      hasCredentials: !!credentials,
+      voicesCount: voices?.length ?? 0
+    };
+  });
+
+  readonly healthMetrics = computed(() => ({
+    totalRequests: this.synthesisCount(),
+    errorCount: this.errorCount(),
+    successRate: this.successRate(),
+    lastCheckTime: this.lastCheckTime(),
+    voicesAvailable: this.voicesCount()
+  }));
+
   readonly providerStatus = computed(() => {
     if (!this.isValidated()) return 'unconfigured';
+    
     const rate = this.successRate();
-    if (rate >= 95) return 'healthy';
-    if (rate >= 80) return 'degraded';
-    return 'unhealthy';
+    const status = rate >= 95 ? 'healthy' : rate >= 80 ? 'degraded' : 'unhealthy';
+    
+    if (status !== 'healthy') {
+      this.logging.warn(`AWS Polly provider status: ${status}`, 'AWS', {
+        successRate: rate,
+        totalRequests: this.synthesisCount(),
+        errors: this.errorCount(),
+        lastCheck: this.lastCheckTime()
+      });
+    }
+    
+    this.updateProviderHealth();
+    return status;
   });
   constructor(
     private logging: LoggingService,
-    private monitoring: MonitoringService
+    private providerMonitoring: ProviderMonitoringService,
+    @Inject(PLATFORM_ID) private platformId: object
   ) {
-    this.logging.info('AWSPollyTTSService initialized', 'AWS');
-    
-    // Effect for provider health monitoring
-    effect(() => {
-      const status = this.providerStatus();
-      const rate = this.successRate();
-      const count = this.synthesisCount();
-      
-      if (count > 0) {
-        this.logging.info(`AWS Polly TTS provider status: ${status} (${rate.toFixed(1)}% success rate)`, 'AWS');
-        
-        if (status === 'unhealthy') {
-          this.logging.warn('AWS Polly TTS provider performance degraded', 'AWS', {
-            successRate: rate,
-            totalRequests: count,
-            errors: this.errorCount()
-          });
-        }
-      }
-    });
+    if (!this.initialized() && isPlatformBrowser(this.platformId)) {
+      this.initialized.set(true);
+      this.logging.info('AWSPollyTTSService initialized', 'AWS');
+    }
   }
   // Core TTS functionality
   async synthesizeSpeech(
@@ -107,10 +125,14 @@ export class AWSPollyTTSService {
     queryId: QueryId
   ): Promise<Result<TTSResult, string>> {
     if (!settings.apiKey) {
-      return Result.failure('AWS credentials are required');
+      return Result.failure('AWS Polly API key is required');
     }
 
-    const region = this.extractRegionFromSettings(settings) || 'us-east-1';
+    if (!settings.secretKey) {
+      return Result.failure('AWS Polly secret key is required');
+    }
+
+    const region = settings.region || 'us-east-1';
 
     return this.logging.trackPerformance(
       'awsPollySynthesize',
@@ -120,15 +142,15 @@ export class AWSPollyTTSService {
         this.logging.info('Starting AWS Polly synthesis', 'AWS', {
           textLength: text.length,
           voice: settings.voice,
-          region,
-          engine: this.getEngineFromVoice(settings.voice)
+          region
         });
 
-        try {          const audioData = await this.makeTextToSpeechRequest(text, settings, region);
+        try {
+          const audioData = await this.makeTextToSpeechRequest(text, settings, region);
           const processingTime = Date.now() - startTime;
 
-          this.monitoring.recordRequest('aws_polly_synthesis', processingTime, true, ModelProvider.AWS);
           this.synthesisCount.update(count => count + 1);
+          this.updateProviderHealth();
 
           const result: TTSResult = {
             queryId,
@@ -147,10 +169,12 @@ export class AWSPollyTTSService {
             processingTime
           });
 
-          return Result.success(result);        } catch (error) {
+          return Result.success(result);
+
+        } catch (error) {
           const processingTime = Date.now() - startTime;
-          this.monitoring.recordRequest('aws_polly_synthesis', processingTime, false, ModelProvider.AWS);
           this.errorCount.update(count => count + 1);
+          this.updateProviderHealth();
 
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
           this.logging.error('AWS Polly synthesis failed', error as Error, 'AWS');
@@ -161,7 +185,7 @@ export class AWSPollyTTSService {
             createdAt: new Date(),
             updatedAt: new Date(),
             error: {
-              code: 'SYNTHESIS_ERROR',
+              code: 'SYNTHESIS_ERROR', 
               message: errorMessage,
               details: error
             },
@@ -174,16 +198,22 @@ export class AWSPollyTTSService {
       'AWS'
     );
   }
+
   // Voice management
-  async getAvailableVoices(accessKeyId: string, secretAccessKey: string, region: string): Promise<Result<AWSVoice[], string>> {
-    const cachedVoicesValue = this.cachedVoices();
-    if (cachedVoicesValue) {
-      return Result.success(cachedVoicesValue);
+  async getAvailableVoices(
+    accessKeyId: string,
+    secretAccessKey: string,
+    region: string
+  ): Promise<Result<AWSVoice[], string>> {
+    const cacheStatus = this.cacheStatus();
+    if (cacheStatus.hasVoices) {
+      return Result.success(this.cachedVoices()!);
     }
 
     return this.logging.trackPerformance(
       'awsPollyGetVoices',
-      async () => {        try {
+      async () => {
+        try {
           const credentials = await this.getAWSCredentials(accessKeyId, secretAccessKey);
           if (credentials.isFailure()) {
             return Result.failure(credentials.getError());
@@ -198,8 +228,11 @@ export class AWSPollyTTSService {
           );
 
           if (!response.ok) {
-            throw new Error(`Failed to fetch voices: ${response.status} ${response.statusText}`);
-          }          const data = await response.json();
+            const errorText = await response.text();
+            throw new Error(`Failed to fetch voices: ${response.status} ${response.statusText} - ${errorText}`);
+          }
+
+          const data = await response.json();
           const voices = this.transformPollyVoices(data.Voices || []);
           this.cachedVoices.set(voices);
 
@@ -250,32 +283,37 @@ export class AWSPollyTTSService {
     return ssml;
   }
   // Validation and capabilities
-  async validateConfiguration(settings: AWSPollySettings): Promise<Result<boolean, string>> {    if (!settings.apiKey) {
+  async validateConfiguration(settings: AWSPollySettings): Promise<Result<boolean, string>> {
+    if (!settings.apiKey || !settings.secretKey) {
       this.isValidated.set(false);
-      return Result.failure('AWS access key ID is required');
-    }
-
-    if (!settings.secretKey) {
-      this.isValidated.set(false);
-      return Result.failure('AWS secret access key is required');
+      return Result.failure('AWS credentials are required');
     }
 
     const region = this.extractRegionFromSettings(settings) || 'us-east-1';
+    
+    try {
+      // Test credentials by fetching voices
+      const voicesResult = await this.getAvailableVoices(
+        settings.apiKey.getValue(),
+        settings.secretKey.getValue(),
+        region
+      );
 
-    // Test credentials by fetching voices
-    const voicesResult = await this.getAvailableVoices(
-      settings.apiKey.getValue(),
-      settings.secretKey.getValue(),
-      region
-    );
-      if (voicesResult.isFailure()) {
-      this.isValidated.set(false);
+      if (voicesResult.isFailure()) {      this.isValidated.set(false);
+      this.updateProviderHealth(); // Update metrics after failed validation
       return Result.failure(`Invalid AWS credentials or region: ${voicesResult.getError()}`);
     }
 
-    this.isValidated.set(true);
-    this.logging.info('AWS Polly configuration validated successfully', 'AWS');
-    return Result.success(true);
+      this.isValidated.set(true);
+      this.updateProviderHealth(); // Update metrics after successful validation
+      this.logging.info('AWS Polly configuration validated successfully', 'AWS');
+      return Result.success(true);
+
+    } catch (error) {
+      this.isValidated.set(false);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return Result.failure(`AWS Polly configuration validation failed: ${errorMessage}`);
+    }
   }
 
   getCapabilities() {
@@ -319,7 +357,7 @@ export class AWSPollyTTSService {
       (voice.additionalLanguageCodes && voice.additionalLanguageCodes.includes(languageCode))
     );
   }
-  // Clear caches
+  // Clear caches and reset state
   clearCache(): void {
     this.cachedVoices.set(null);
     this.cachedCredentials.set(null);
@@ -452,5 +490,23 @@ export class AWSPollyTTSService {
     // Rough estimation for MP3: assumes variable bitrate around 64kbps
     const bytesPerSecond = 64 * 1024 / 8; // 64kbps in bytes per second
     return audioData.byteLength / bytesPerSecond;
+  }
+
+  // Private helper methods
+  private updateProviderHealth(): void {
+    const status = !this.isValidated() ? "unconfigured" as const
+      : this.successRate() < 80 ? "unhealthy" as const
+      : this.successRate() < 95 ? "degraded" as const
+      : "healthy" as const;
+
+    const metrics: ProviderHealthMetrics = {
+      synthesisCount: this.synthesisCount(),
+      errorCount: this.errorCount(),
+      successRate: this.successRate(),
+      lastCheckTime: this.lastCheckTime(),
+      status
+    };
+
+    this.providerMonitoring.updateProviderMetrics(ModelProvider.AWS, metrics);
   }
 }

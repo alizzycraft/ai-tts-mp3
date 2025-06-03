@@ -1,15 +1,13 @@
-import { Component, computed, effect, input, output, OnDestroy, inject } from '@angular/core';
+import { Component, computed, input, output, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { TTSResult } from '../../integration/domain-types';
+import { TTSResult, ModelProvider, Voice } from '../../integration/domain-types';
 import { FormatDatePipe } from '../shared/pipes/format-date.pipe';
 import { FormatDurationPipe } from '../shared/pipes/format-duration.pipe';
 import { TruncateTextPipe } from '../shared/pipes/truncate-text.pipe';
 import { PlaybackService } from '../../integration/playback.service';
 import { AngularTTSService } from '../../integration/angular-tts.service';
 import { SettingsService } from '../shared/settings.service';
-import { HistoryItem } from '../../integration/history-storage.service';
-import { ModelProvider, Voice } from '../../integration/domain-types';
-import { ChangeDetectorRef } from '@angular/core';
+import { HistoryItem } from '../../infrastructure/storage/storage-types';
 
 // Define a type for currentQueryInfo
 interface CurrentQueryInfo {
@@ -34,7 +32,6 @@ export class AudioPlayerComponent implements OnDestroy {
   private ttsService = inject(AngularTTSService);
   protected settingsService = inject(SettingsService);
   public playbackService = inject(PlaybackService);
-  private cdr = inject(ChangeDetectorRef);
 
   // Input signals
   currentQueryInfo = input<CurrentQueryInfo | null>(null);
@@ -42,6 +39,43 @@ export class AudioPlayerComponent implements OnDestroy {
 
   // Output events
   clearResult = output<void>();
+
+  // Computed properties
+  readonly queryMetadata = computed(() => {
+    const info = this.currentQueryInfo();
+    if (!info) return null;
+    
+    // Log query info changes
+    console.log('[AudioPlayer] Query Info Updated:', {
+      text: info.text,
+      title: info.title,
+      settings: info.settings
+    });
+    
+    return {
+      title: info.title,
+      text: info.text,
+      settings: info.settings
+    };
+  });
+
+  readonly resultMetadata = computed(() => {
+    const result = this.currentResult();
+    if (!result) return null;
+    
+    // Log result changes
+    if (result.duration) {
+      console.log('[AudioPlayer] Duration found!', result.duration);
+    }
+    if (result.fileSize) {
+      console.log('[AudioPlayer] File size found!', result.fileSize);
+    }
+    
+    return {
+      duration: result.duration,
+      fileSize: result.fileSize
+    };
+  });
 
   // Computed property for display text - Using pipe
   displayText = computed(() => {
@@ -127,23 +161,6 @@ export class AudioPlayerComponent implements OnDestroy {
     const result = this.currentResult(); // Get the full currentResult object
     const duration = result?.duration;
     return duration; // The formatting pipe will handle display
-  });  // Effect to react to changes in currentQueryInfo
-  private queryInfoEffect = effect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _info = this.currentQueryInfo();
-    // Effect runs to track changes in currentQueryInfo
-    // Playback is handled by user interaction through the play button
-  });
-
-  // Effect to specifically log currentResult changes
-  private currentResultEffect = effect(() => {
-    const result = this.currentResult();
-    if (result?.duration !== undefined) {
-      // console.log('[AudioPlayer] currentResultEffect - Duration found!', result.duration);
-    }
-    if (result?.fileSize !== undefined) {
-      // console.log('[AudioPlayer] currentResultEffect - File size found!', result.fileSize);
-    }
   });
 
   ngOnDestroy(): void {
@@ -264,7 +281,6 @@ export class AudioPlayerComponent implements OnDestroy {
          // based on the current state and the provided item ID.
          await this.playbackService.togglePlayPause(result, itemId); // Pass result and itemId
          // Manually trigger change detection to ensure the play/pause button updates
-         this.cdr.detectChanges();
       } else {
          console.warn('[AudioPlayer] onPlayPauseClick: Cannot toggle playback, currentResult is null.');
       }

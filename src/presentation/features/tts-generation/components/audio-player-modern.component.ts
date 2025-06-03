@@ -1,5 +1,5 @@
 // Modern AudioPlayerComponent with signal-based inputs and outputs
-import { Component, computed, effect, OnDestroy, inject, input, output, signal } from '@angular/core';
+import { Component, computed, OnDestroy, inject, input, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TTSResult } from '../../../../integration/domain-types';
 import { FormatDatePipe } from '../../../shared/pipes/format-date.pipe';
@@ -42,9 +42,6 @@ export class AudioPlayerModernComponent implements OnDestroy {
 
   // Internal state signals
   private isLoadingSignal = signal(false);
-  private isPlayingSignal = signal(false);
-  private currentTimeSignal = signal(0);
-  private durationSignal = signal(0);
   private volumeSignal = signal(1.0); // 0.0 to 1.0
 
   // Computed properties
@@ -55,17 +52,25 @@ export class AudioPlayerModernComponent implements OnDestroy {
   });
 
   displayDuration = computed(() => {
-    return this.durationSignal() || this.currentQueryInfo()?.estimatedDuration || 0;
+    const info = this.currentQueryInfo();
+    return info?.estimatedDuration || 0;
   });
 
-  isPlaying = computed(() => this.isPlayingSignal());
-  currentTime = computed(() => this.currentTimeSignal());
-  duration = computed(() => this.durationSignal());
+  isPlaying = computed(() => {
+    const result = this.currentResult();
+    if (result && !this.isLoadingSignal()) {
+      this.checkAndLoadAudio(result);
+    }
+    return this.playbackService.isPlaying();
+  });
+
+  currentTime = computed(() => this.playbackService.currentTime());
+  duration = computed(() => this.playbackService.totalDuration());
   volume = computed(() => this.volumeSignal());
   
   progress = computed(() => {
-    const current = this.currentTimeSignal();
-    const total = this.durationSignal();
+    const current = this.currentTime();
+    const total = this.duration();
     return total > 0 ? (current / total) * 100 : 0;
   });
 
@@ -73,21 +78,23 @@ export class AudioPlayerModernComponent implements OnDestroy {
     return !!this.currentResult() && !this.isLoadingSignal();
   });
 
-  constructor() {
-    // Set up side effects when inputs change
-    effect(() => {
-      const result = this.currentResult();
-      if (result) {
-        this.loadAudioForResult(result);
-      }
-    });
-
-    // Sync with playback service state
-    effect(() => {
-      this.isPlayingSignal.set(this.playbackService.isPlaying());
-      this.currentTimeSignal.set(this.playbackService.currentTime());
-      this.durationSignal.set(this.playbackService.totalDuration());
-    });
+  // Helper method to load audio for a result
+  private checkAndLoadAudio(result: TTSResult): void {
+    if (!this.isLoadingSignal() && result.audioData) {
+      this.isLoadingSignal.set(true);
+      
+      // Create a new audio context and buffer
+      const audioContext = new AudioContext();
+      audioContext.decodeAudioData(result.audioData.buffer)
+        .then(buffer => {
+          // Now we have a decoded audio buffer
+          this.isLoadingSignal.set(false);
+        })
+        .catch(error => {
+          console.error('[AudioPlayer] Failed to decode audio:', error);
+          this.isLoadingSignal.set(false);
+        });
+    }
   }
 
   ngOnDestroy() {
@@ -97,25 +104,30 @@ export class AudioPlayerModernComponent implements OnDestroy {
 
   // Player controls
   togglePlayPause(): void {
-    if (this.isPlayingSignal()) {
+    if (this.playbackService.isPlaying()) {
       this.playbackService.pause();
     } else {
       this.playbackService.play();
     }
-    // No need to update isPlayingSignal here, it's handled by the effect
   }
 
-  stop(): void {
-    this.stopPlayback();
-  }
-  seekTo(time: number): void {
-    this.playbackService.seek(time);
+  stopPlayback(): void {
+    if (this.playbackService.isPlaying()) {
+      this.playbackService.stop();
+    }
   }
 
-  setVolume(volume: number): void {
-    if (volume >= 0 && volume <= 1) {
-      this.volumeSignal.set(volume);
-      // Store volume in a signal since PlaybackService doesn't have volume control
+  updateVolume(value: number): void {
+    const newVolume = Math.max(0, Math.min(1, value));
+    this.volumeSignal.set(newVolume);
+    // Volume control will be handled by audio service
+  }
+
+  updateProgress(position: number): void {
+    const duration = this.duration();
+    if (duration > 0) {
+      const time = (position / 100) * duration;
+      this.playbackService.seek(time);
     }
   }
 
@@ -140,24 +152,6 @@ export class AudioPlayerModernComponent implements OnDestroy {
   onRateChange(rate: number): void {
     // Playback rate control would need to be implemented in PlaybackService
     console.log('Playback rate changed to:', rate);
-  }
-
-  // Helper methods
-  private async loadAudioForResult(result: TTSResult): Promise<void> {
-    this.isLoadingSignal.set(true);
-    try {
-      await this.playbackService.loadAudio(result);
-      this.durationSignal.set(this.playbackService.totalDuration());
-    } catch (error) {
-      console.error('[AudioPlayer] Error loading audio:', error);
-    } finally {
-      this.isLoadingSignal.set(false);
-    }
-  }
-
-  private stopPlayback(): void {
-    this.playbackService.stop();
-    this.currentTimeSignal.set(0);
   }
 
   // Format time helper functions (could be moved to a pipe)

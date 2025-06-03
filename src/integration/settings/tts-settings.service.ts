@@ -16,24 +16,27 @@ export class TTSSettingsService {
    */
   async saveLastUsedSettings(settings: TTSSettings): Promise<Result<void, string>> {
     try {
-      Logger.debug('Saving last used TTS settings', { 
+      // Create sanitized settings without sensitive data
+      const sanitizedSettings = {
+        provider: settings.provider,
+        model: settings.model,
+        voice: settings.voice,
+        // Do not copy the API key
+      } as TTSSettings;
+
+      Logger.info('Saving last used TTS settings', { 
         provider: settings.provider, 
-        model: settings.model 
+        model: settings.model, 
+        voice: settings.voice 
       });
 
-      // Convert ApiKey to string for storage
-      const storableSettings = {
-        ...settings,
-        apiKey: settings.apiKey?.getValue()
-      };
-      
-      const serialized = JSON.stringify(storableSettings);
+      const serialized = JSON.stringify(sanitizedSettings);
       localStorage.setItem(this.STORAGE_KEY, serialized);
       
-      Logger.info('Last used TTS settings saved successfully');
+      Logger.info('Last used TTS settings saved (excluding sensitive data)');
       return Result.success(undefined);
     } catch (error) {
-      Logger.error('Failed to save last used TTS settings', error as Error);
+      Logger.error('Failed to save TTS settings', error as Error);
       return Result.failure('Failed to save settings');
     }
   }

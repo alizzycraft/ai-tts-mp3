@@ -25,54 +25,57 @@ export class FileSystemStorageManagerService {
   private get isBrowser(): boolean {
     return isPlatformBrowser(this.platformId);
   }
+
   /**
    * Initialize service and check for previous folder state (Browser only)
    */
   async initializeService(): Promise<{ success: boolean; waitingForUser?: boolean }> {
+    // Add a guard to prevent multiple initializations
     if (this.initialized) {
+      console.debug('[FileSystemStorageManagerService] Already initialized');
       return { success: true };
     }
-    this.initialized = true;
-    console.log('[FileSystemStorageManagerService] initializeService called');
-    if (!this.isBrowser) return { success: true };
-    
-    console.log('[FileSystemStorageManagerService] Initializing service...');
+
+    if (!this.isBrowser) {
+      console.debug('[FileSystemStorageManagerService] Skipping initialization during SSR');
+      return { success: true };
+    }
     
     try {
+      console.debug('[FileSystemStorageManagerService] Starting initialization...');
+      this.initialized = true;
+      
       // Initialize storage state with File System API support detection
       const isSupported = this.fileSystemOperations.isFileSystemAccessSupported();
       this.storageState.initializeState(isSupported);
       
-      // After loading persistent state
+      // Load persistent state
       await this.storageState.loadStorageState();
-      
-      // Determine if we need to prompt user to reconnect
-      const fsState = this.storageState.getFileSystemState();
+
+      // Get previous folder state for reconnection hint
       const folderState = this.storageState.getPreviousFolderState();
-      let rawStorageState: any = {};
-      try { rawStorageState = JSON.parse(localStorage.getItem('tts-storage-state') || '{}'); } catch {}
-      let rawFolderState: any = {};
-      try { rawFolderState = JSON.parse(localStorage.getItem('tts-folder-state') || '{}'); } catch {}
-      const promptPath = fsState.selectedPath || folderState?.selectedPath || rawFolderState.selectedPath || rawStorageState.selectedPath;
-      
-      // Debug logs for prompt decision
-      console.log('[FileSystemStorageManagerService] fsState:', fsState);
-      console.log('[FileSystemStorageManagerService] folderState:', folderState);
-      console.log('[FileSystemStorageManagerService] rawStorageState:', rawStorageState);
-      console.log('[FileSystemStorageManagerService] rawFolderState:', rawFolderState);
-      console.log('[FileSystemStorageManagerService] computed promptPath:', promptPath);
-      
+      const fsState = this.storageState.getFileSystemState();
+
+      // Only log in debug mode to avoid noise
+      console.debug('[FileSystemStorageManagerService] State loaded:', {
+        isSupported,
+        hasStorageState: !!fsState,
+        hasFolderState: !!folderState
+      });
+
       // Prompt if any prior path exists
+      const promptPath = folderState?.selectedPath || fsState?.selectedPath;
       if (isSupported && promptPath) {
-        console.log('[FileSystemStorageManagerService] Prompting user to reconnect to previous folder:', promptPath);
+        console.debug('[FileSystemStorageManagerService] Will prompt to reconnect folder:', promptPath);
         this.storageState.setFolderReconnectionPrompt({ previousPath: promptPath, shouldPrompt: true });
         return { success: true, waitingForUser: true }; // Indicate that we're waiting for user response
       }
 
       // Load history if we don't need to prompt
-      console.log('[FileSystemStorageManagerService] Loading history normally...');
+      console.debug('[FileSystemStorageManagerService] Loading history normally...');
       await this.historyManagement.loadHistory();
-      return { success: true, waitingForUser: false };
+
+      return { success: true };
     } catch (error) {
       console.error('[FileSystemStorageManagerService] Error during initialization:', error);
       return { success: false };

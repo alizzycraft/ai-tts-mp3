@@ -1,16 +1,25 @@
 import { CommonModule } from '@angular/common';
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { ModalService } from './modal.service';
+import { ReconnectionPromptModalComponent } from '../presentation/features/history-management/components/reconnection-prompt-modal/reconnection-prompt-modal.component';
 
 @Component({
   selector: 'app-modal-outlet',
   standalone: true,
-  imports: [CommonModule],
-  template: `
-    @if (modalService.template()) {
+  imports: [CommonModule, ReconnectionPromptModalComponent],  template: `
+    @if (modalService.isOpen()) {
       <div class="modal-backdrop" (click)="onBackdropClick($event)">
-        <ng-container *ngTemplateOutlet="modalService.template()!; context: { $implicit: modalService.context() }">
-        </ng-container>
+        @if (modalService.template()) {
+          <ng-container *ngTemplateOutlet="modalService.template()!; context: { $implicit: modalService.context() }">
+          </ng-container>
+        }
+        @if (modalService.componentType()) {
+          @switch (modalService.componentType()) {
+            @case ('reconnection-prompt') {
+              <app-reconnection-prompt-modal></app-reconnection-prompt-modal>
+            }
+          }
+        }
       </div>
     }
   `,
@@ -32,16 +41,13 @@ import { ModalService } from './modal.service';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ModalOutletComponent {
-  constructor(
-    public modalService: ModalService,
-    private cdr: ChangeDetectorRef
-  ) {}
-
-  onBackdropClick(event: MouseEvent): void {
-    // Only close if clicking the backdrop itself, not modal content
+  constructor(public modalService: ModalService) {}  onBackdropClick(event: MouseEvent): void {
+    // Check if the click target is the backdrop itself, not a child element
     if (event.target === event.currentTarget) {
-      this.modalService.close();
-      this.cdr.detectChanges();
+      // Prevent backdrop click from dismissing modal
+      // Modals should only be closed via button actions
+      event.stopPropagation();
+      event.preventDefault();
     }
   }
 }

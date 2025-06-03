@@ -1,4 +1,4 @@
-import { Component, Input, computed, signal, effect, OnDestroy, inject, output } from '@angular/core';
+import { Component, Input, computed, signal, OnDestroy, inject, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TTSResult } from '../../../../integration/domain-types';
 import { FormatDatePipe } from '../../../shared/pipes/format-date.pipe';
@@ -9,7 +9,6 @@ import { AngularTTSService } from '../../../../integration/angular-tts.service';
 import { SettingsService } from '../../../shared/settings.service';
 import { HistoryItem } from '../../../../integration/history-storage.service';
 import { ModelProvider, Voice } from '../../../../integration/domain-types';
-import { ChangeDetectorRef } from '@angular/core';
 
 // Define a type for currentQueryInfo
 interface CurrentQueryInfo {
@@ -34,32 +33,66 @@ export class AudioPlayerComponent implements OnDestroy {
   private ttsService = inject(AngularTTSService);
   protected settingsService = inject(SettingsService);
   public playbackService = inject(PlaybackService);
-  private cdr = inject(ChangeDetectorRef);
 
-  // Input signal for the current query information
+  // Input signals
   @Input() currentQueryInfo = signal<CurrentQueryInfo | null>(null);
   @Input() currentResult = signal<TTSResult | null>(null);
 
   // Output events
   clearResult = output<void>();
 
-  // Computed property for display text - Using pipe
-  displayText = computed(() => {
+  // Computed signals for query info
+  readonly queryMetadata = computed(() => {
     const info = this.currentQueryInfo();
-    if (!info) return '...'; // Or an appropriate placeholder
-    // Prioritize title if available, otherwise use truncated text
-    const textToDisplay = info.title || info.text;
-    // The truncation pipe is applied in the template
-    return textToDisplay;
+    if (!info) return null;
+    this.logQueryInfo(info);
+    return {
+      title: info.title,
+      text: info.text,
+      settings: info.settings
+    };
   });
 
-  // Computed property for display creation date - Using pipe
-  displayCreatedAt = computed(() => {
-    const info = this.currentQueryInfo();
-    if (!info?.createdAt) return '-';
-    // Rely on template usage of FormatDatePipe
-    return info.createdAt.toISOString();
+  // Computed signals for result info
+  readonly resultMetadata = computed(() => {
+    const result = this.currentResult();
+    if (!result) return null;
+    this.logResultInfo(result);
+    return {
+      duration: result.duration,
+      fileSize: result.fileSize
+    };
   });
+
+  // Display computeds
+  readonly displayText = computed(() => {
+    const info = this.currentQueryInfo();
+    if (!info) return '...';
+    return info.title || info.text;
+  });
+
+  readonly displayCreatedAt = computed(() => {
+    const info = this.currentQueryInfo();
+    return info?.createdAt?.toISOString() || '-';
+  });
+
+  // Logging methods (moved from effects)
+  private logQueryInfo(info: CurrentQueryInfo): void {
+    console.log('[AudioPlayer] Query Info Updated:', {
+      text: info.text,
+      title: info.title,
+      settings: info.settings
+    });
+  }
+
+  private logResultInfo(result: TTSResult): void {
+    if (result.duration) {
+      console.log('[AudioPlayer] Duration found!', result.duration);
+    }
+    if (result.fileSize) {
+      console.log('[AudioPlayer] File size found!', result.fileSize);
+    }
+  }
 
   // Computed properties
   hasAudio = computed(() => {
@@ -127,24 +160,7 @@ export class AudioPlayerComponent implements OnDestroy {
     const result = this.currentResult(); // Get the full currentResult object
     const duration = result?.duration;
     return duration; // The formatting pipe will handle display
-  });  // Effect to react to changes in currentQueryInfo
-  private queryInfoEffect = effect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _info = this.currentQueryInfo();
-    // Effect runs to track changes in currentQueryInfo
-    // Playback is handled by user interaction through the play button
-  });
-
-  // Effect to specifically log currentResult changes
-  private currentResultEffect = effect(() => {
-    const result = this.currentResult();
-    if (result?.duration !== undefined) {
-      // console.log('[AudioPlayer] currentResultEffect - Duration found!', result.duration);
-    }
-    if (result?.fileSize !== undefined) {
-      // console.log('[AudioPlayer] currentResultEffect - File size found!', result.fileSize);
-    }
-  });
+  });  
 
   ngOnDestroy(): void {
     this.playbackService.stop();
@@ -264,7 +280,6 @@ export class AudioPlayerComponent implements OnDestroy {
          // based on the current state and the provided item ID.
          await this.playbackService.togglePlayPause(result, itemId); // Pass result and itemId
          // Manually trigger change detection to ensure the play/pause button updates
-         this.cdr.detectChanges();
       } else {
          console.warn('[AudioPlayer] onPlayPauseClick: Cannot toggle playback, currentResult is null.');
       }

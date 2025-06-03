@@ -1,5 +1,5 @@
 // Orchestrating monitoring service that coordinates health, metrics, and alerts
-import { Injectable, computed, signal, effect } from '@angular/core';
+import { Injectable, computed, signal } from '@angular/core';
 import { HealthCheckService, HealthStatus } from './health-check.service';
 import { MetricsCollectionService, ApplicationMetrics } from './metrics-collection.service';
 import { AlertService, Alert } from './alert.service';
@@ -14,6 +14,8 @@ export class MonitoringService {
   private monitoringEnabled = signal(true);
   private lastMonitoringRun = signal<Date | null>(null);
   private monitoringInterval = signal(60 * 1000); // 1 minute
+  private monitoringTimer: ReturnType<typeof setInterval> | null = null;
+  private initialized = false;
   
   // Computed signals for reactive coordination
   readonly currentHealthStatus = computed(() => this.healthCheck.healthStatus());
@@ -28,49 +30,23 @@ export class MonitoringService {
     const alerts = this.activeAlerts();
     const criticalCount = this.criticalAlerts().length;
     
-    if (criticalCount > 0 || health.status === 'unhealthy') {
-      return 'unhealthy' as const;
-    } else if (alerts.length > 0 || health.status === 'degraded') {
-      return 'degraded' as const;
-    }
-    return 'healthy' as const;
+    // Calculate status
+    if (criticalCount > 0) return 'unhealthy';
+    if (alerts.length > 0) return 'degraded';
+    return health.status;
   });
-  
+
   // Monitoring summary computed signal
   readonly monitoringSummary = computed(() => {
     const metrics = this.currentMetrics();
     const activeAlerts = this.activeAlerts();
     const health = this.currentHealthStatus();
     
-    const issues: string[] = [];
-    const recommendations: string[] = [];
+    // Check metrics and triggers alerts if needed
+    this.checkMetricsAndTriggerAlerts(metrics);
     
-    // Analyze metrics for issues and recommendations
-    if (metrics.storage.percentageUsed > 90) {
-      issues.push('Storage critically low');
-      recommendations.push('Clear old history items or enable file system storage');
-    } else if (metrics.storage.percentageUsed > 80) {
-      issues.push('Storage usage high');
-      recommendations.push('Consider clearing old history items');
-    }
-    
-    if (metrics.requests.total > 0) {
-      const errorRate = (metrics.requests.failed / metrics.requests.total) * 100;
-      if (errorRate > 10) {
-        issues.push(`High error rate: ${errorRate.toFixed(1)}%`);
-        recommendations.push('Check provider configurations and network connectivity');
-      }
-    }
-    
-    if (metrics.requests.averageResponseTime > 5000) {
-      issues.push('Slow response times');
-      recommendations.push('Check network connection and provider status');
-    }
-    
-    if (activeAlerts.length > 0) {
-      issues.push(`${activeAlerts.length} unacknowledged alert(s)`);
-      recommendations.push('Review and acknowledge alerts');
-    }
+    // Analyze metrics for issues
+    const { issues, recommendations } = this.analyzeMetricsForIssues(metrics);
     
     return {
       health,
@@ -88,41 +64,93 @@ export class MonitoringService {
     private alertService: AlertService,
     private logging: LoggingService
   ) {
-    // Reactive effects for monitoring coordination
-    effect(() => {
-      const enabled = this.monitoringEnabled();
-      if (enabled) {
-        this.startMonitoringTimer();
-      }
-    });
-    
-    // Effect to log system status changes
-    effect(() => {
-      const status = this.systemStatus();
-      const criticalCount = this.criticalAlerts().length;
-      
-      if (status === 'unhealthy') {
-        this.logging.error(`System unhealthy - ${criticalCount} critical alerts`, new Error('System Status'), 'Monitoring');
-      } else if (status === 'degraded') {
-        this.logging.warn(`System degraded - ${this.activeAlerts().length} active alerts`, 'Monitoring');
-      }
-    });
-    
-    // Effect to automatically trigger alert checks when metrics change
-    effect(() => {
-      const metrics = this.currentMetrics();
-      // Trigger alert evaluation when metrics are updated
-      this.alertService.checkAlerts(metrics);
-    });
+    if (!this.initialized) {
+      this.initialized = true;
+      this.startMonitoring();
+    }
   }
-  
-  private startMonitoringTimer(): void {
-    const interval = this.monitoringInterval();
-    setInterval(() => {
-      if (this.monitoringEnabled()) {
-        this.runMonitoringCycle();
+
+  private startMonitoring(): void {
+    if (this.monitoringEnabled()) {
+      this.monitoringTimer = setInterval(() => {
+        void this.runMonitoringCycle();
+        this.lastMonitoringRun.set(new Date());
+      }, this.monitoringInterval());
+    }
+  }
+
+  private checkMetricsAndTriggerAlerts(metrics: ApplicationMetrics): void {
+    // Set up alert rules based on metrics
+    const alertRules = [
+      {
+        id: 'storage-critical',
+        name: 'Storage Critical',
+        condition: (m: ApplicationMetrics) => m.storage.percentageUsed > 90,
+        severity: 'critical' as const,
+        message: 'Storage critically low',
+        enabled: true,
+        cooldownMinutes: 60
+      },
+      {
+        id: 'storage-warning',
+        name: 'Storage Warning',
+        condition: (m: ApplicationMetrics) => m.storage.percentageUsed > 80,
+        severity: 'warning' as const,
+        message: 'Storage usage high',
+        enabled: true,
+        cooldownMinutes: 120
+      },
+      {
+        id: 'error-rate',
+        name: 'High Error Rate',
+        condition: (m: ApplicationMetrics) => 
+          m.requests.total > 0 && (m.requests.failed / m.requests.total) * 100 > 10,
+        severity: 'warning' as const,
+        message: 'High error rate detected',
+        enabled: true,
+        cooldownMinutes: 30
+      },
+      {
+        id: 'response-time',
+        name: 'Slow Response Times',
+        condition: (m: ApplicationMetrics) => m.requests.averageResponseTime > 5000,
+        severity: 'warning' as const,
+        message: 'Slow response times detected',
+        enabled: true,
+        cooldownMinutes: 30
       }
-    }, interval);
+    ];
+
+    // Check each rule and trigger alerts if needed
+    this.alertService.checkAlerts(metrics);
+  }
+
+  private analyzeMetricsForIssues(metrics: ApplicationMetrics) {
+    const issues: string[] = [];
+    const recommendations: string[] = [];
+    
+    if (metrics.storage.percentageUsed > 90) {
+      issues.push('Storage critically low');
+      recommendations.push('Clear old history items or enable file system storage');
+    } else if (metrics.storage.percentageUsed > 80) {
+      issues.push('Storage usage high');
+      recommendations.push('Consider clearing old history items');
+    }
+    
+    if (metrics.requests.total > 0) {
+      const errorRate = (metrics.requests.failed / metrics.requests.total) * 100;
+      if (errorRate > 10) {
+        issues.push(`High error rate: ${errorRate.toFixed(1)}%`);
+        recommendations.push('Check configuration and connectivity');
+      }
+    }
+    
+    if (metrics.requests.averageResponseTime > 5000) {
+      issues.push('Slow response times');
+      recommendations.push('Check network connection and provider status');
+    }
+    
+    return { issues, recommendations };
   }
 
   // Health monitoring - enhanced with signals
@@ -131,7 +159,7 @@ export class MonitoringService {
   }
 
   async runHealthChecks(): Promise<void> {
-    return this.healthCheck.runHealthChecks();
+    return this.healthCheck.runSystemHealthChecks(); // Only run system health checks, not provider checks
   }
 
   // Metrics collection - enhanced with signals
@@ -187,8 +215,8 @@ export class MonitoringService {
     try {
       this.lastMonitoringRun.set(new Date());
       
-      // Run health checks
-      await this.runHealthChecks();
+      // Run system health checks only (no provider checks)
+      await this.healthCheck.runSystemHealthChecks();
       
       // Check for alerts
       const newAlerts = this.checkAlerts();
@@ -208,7 +236,7 @@ export class MonitoringService {
         totalRequests: metrics.requests.total,
         errorRate: `${((metrics.requests.failed / Math.max(1, metrics.requests.total)) * 100).toFixed(1)}%`
       });
-      
+
     } catch (error) {
       this.logging.error('Monitoring cycle failed', error as Error, 'Monitoring');
     }

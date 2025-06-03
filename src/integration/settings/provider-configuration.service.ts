@@ -2,7 +2,11 @@
 import { Injectable } from '@angular/core';
 import { LoggingService } from '../logging.service';
 import { Result } from '../../common/result';
-import { ModelProvider } from '../../domain/tts.entity';
+import { ModelProvider, TTSSettings } from '../../domain/tts.entity';
+import { TTSProviderFactory } from '../providers/tts-provider.factory';
+import { signal, computed } from '@angular/core';
+import { ApiKey } from '../../domain/value-objects/api-key';
+import { BrowserStorageService } from '../../infrastructure/storage/browser-storage.service';
 
 export interface ProviderConfiguration {
   provider: ModelProvider;
@@ -19,49 +23,183 @@ export interface ProviderConfiguration {
   };
 }
 
+export interface ProviderValidationResult {
+  provider: ModelProvider;
+  isValid: boolean;
+  message: string;
+  timestamp: Date;
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class ProviderConfigurationService {
   private readonly STORAGE_KEY = 'tts_provider_configs';
-  private cachedConfigurations?: ProviderConfiguration[];
 
-  constructor(private logging: LoggingService) {}
+  // Signals for reactive state
+  private readonly configurations = signal<ProviderConfiguration[]>([]);
+  private readonly providerValidationResults = signal<Map<ModelProvider, ProviderValidationResult>>(new Map());
+  private readonly lastValidationTime = signal<Date>(new Date());
 
-  getAvailableProviders(): ModelProvider[] {
-    // First check if there are any provider configurations
-    const configurationsResult = this.loadConfigurationsFromStorage();
-    if (configurationsResult.isSuccess()) {
-      const enabledProviders = configurationsResult.getValue()
-        .filter(config => config.enabled)
-        .map(config => config.provider);
-      
-      return enabledProviders.length > 0 ? enabledProviders : [ModelProvider.OPENAI];
-    }
+  // Computed signals
+  readonly validConfigurations = computed(() => {
+    return this.configurations().filter(config => config.enabled);
+  });
 
-    // Fall back to default provider list if no configurations exist
-    return [ModelProvider.OPENAI, ModelProvider.ELEVENLABS, ModelProvider.GOOGLE, ModelProvider.AZURE, ModelProvider.AWS];
+  readonly validationStatus = computed(() => {
+    return Array.from(this.providerValidationResults().values());
+  });
+
+  readonly availableProviders = computed(() => {
+    const enabledProviders = this.validConfigurations().map(config => config.provider);
+    return enabledProviders.length > 0 ? enabledProviders : [ModelProvider.OPENAI];
+  });
+
+  readonly mergedConfigurations = computed(() => {
+    const configs = this.configurations();
+    const apiKeys = this.apiKeyMap();
+    
+    return configs.map(config => ({
+      ...config,
+      apiKey: apiKeys.get(config.provider)?.getValue()
+    }));
+  });
+
+  constructor(
+    private logging: LoggingService,
+    private providerFactory: TTSProviderFactory,
+    private browserStorage: BrowserStorageService
+  ) {
+    this.initializeConfigurations();
   }
 
-  private loadConfigurationsFromStorage(): Result<ProviderConfiguration[], string> {
+  private initializeConfigurations(): void {
     try {
-      if (this.cachedConfigurations) {
-        return Result.success(this.cachedConfigurations);
-      }
-
-      const stored = localStorage.getItem(this.STORAGE_KEY);
+      const stored = this.browserStorage.getItem(this.STORAGE_KEY);
       if (!stored) {
-        return Result.success(this.getDefaultConfigurations());
+        this.configurations.set(this.getDefaultConfigurations());
+        return;
       }
 
       const parsed = JSON.parse(stored);
-      this.cachedConfigurations = parsed;
-      return Result.success(parsed);
+      this.configurations.set(parsed);
     } catch (error) {
-      this.logging.error('Failed to load provider configurations', error as Error, 'ProviderConfig');
-      return Result.failure('Failed to load provider configurations');
+      this.logging.error('Failed to initialize configurations', error as Error, 'ProviderConfig');
+      this.configurations.set(this.getDefaultConfigurations());
     }
   }
+
+  getAvailableProviders(): ModelProvider[] {
+    return this.availableProviders();
+  }  getProviderConfiguration(provider: ModelProvider): Result<ProviderConfiguration, string> {
+    try {
+      const config = this.mergedConfigurations().find(c => c.provider === provider);
+      if (!config) {
+        return Result.failure(`No configuration found for provider ${provider}`);
+      }
+
+      return Result.success(config);
+    } catch (error) {
+      this.logging.error('Failed to get provider configuration', error as Error, 'ProviderConfig');
+      return Result.failure('Failed to get configuration');
+    }
+  }async validateProviderConfiguration(
+    provider: ModelProvider
+  ): Promise<Result<ProviderValidationResult, string>> {
+    try {
+      this.logging.info(`Starting validation for provider ${provider}`, 'ProviderConfig');
+
+      const config = this.validConfigurations().find(c => c.provider === provider);
+      if (!config) {
+        const result: ProviderValidationResult = {
+          provider,
+          isValid: false,
+          message: 'Provider is not enabled',
+          timestamp: new Date()
+        };
+        this.updateValidationResults(result);
+        return Result.success(result);
+      }
+
+      const apiKey = this.getApiKey(provider);
+      if (!apiKey) {
+        const result: ProviderValidationResult = {
+          provider,
+          isValid: false,
+          message: 'API key is required',
+          timestamp: new Date()
+        };
+        this.updateValidationResults(result);
+        return Result.success(result);
+      }
+
+      // Create minimal settings for validation
+      const testSettings: TTSSettings = {
+        provider,
+        apiKey,
+        model: 'default',  // Use placeholder values since we only care about API key validation
+        voice: 'default'
+      };
+
+      // Validate configuration
+      const validationResult = await this.providerFactory.validateProviderConfiguration(provider, testSettings);
+      
+      const result: ProviderValidationResult = {
+        provider,
+        isValid: validationResult.isSuccess(),
+        message: validationResult.isSuccess() ? 'Configuration is valid' : validationResult.getError(),
+        timestamp: new Date()
+      };
+
+      this.updateValidationResults(result);
+      return Result.success(result);
+
+    } catch (error) {
+      const result: ProviderValidationResult = {
+        provider,
+        isValid: false,
+        message: `Validation error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date()
+      };
+      
+      this.updateValidationResults(result);
+      return Result.success(result);
+    }
+  }  async loadProviderConfiguration(provider: ModelProvider): Promise<Result<ProviderConfiguration | null, string>> {
+    try {
+      const config = this.configurations().find(c => c.provider === provider);
+      if (!config) {
+        return Result.success(null);
+      }
+
+      // Merge with API key if available
+      const apiKey = this.getApiKey(provider);
+      const mergedConfig = {
+        ...config,
+        apiKey: apiKey ? apiKey.getValue() : undefined
+      };
+
+      return Result.success(mergedConfig);
+    } catch (error) {
+      this.logging.error('Failed to load provider configuration', error as Error, 'ProviderConfig');
+      return Result.failure('Failed to load configuration');
+    }
+  }
+  loadAllProviderConfigurations(): Promise<Result<ProviderConfiguration[], string>> {
+    try {
+      return Promise.resolve(Result.success(this.mergedConfigurations()));
+    } catch (error) {
+      this.logging.error('Failed to load provider configurations', error as Error, 'ProviderConfig');
+      return Promise.resolve(Result.failure('Failed to load configurations'));
+    }
+  }
+  private updateValidationResults(result: ProviderValidationResult): void {
+    const currentResults = new Map(this.providerValidationResults());
+    currentResults.set(result.provider, result);
+    this.providerValidationResults.set(currentResults);
+    this.lastValidationTime.set(new Date());
+  }
+
 
   private getDefaultConfiguration(provider: ModelProvider): ProviderConfiguration {
     const displayNames: Record<ModelProvider, string> = {
@@ -90,11 +228,79 @@ export class ProviderConfigurationService {
 
   private getDefaultConfigurations(): ProviderConfiguration[] {
     return [
-      this.getDefaultConfiguration(ModelProvider.OPENAI),
-      this.getDefaultConfiguration(ModelProvider.ELEVENLABS),
-      this.getDefaultConfiguration(ModelProvider.GOOGLE),
-      this.getDefaultConfiguration(ModelProvider.AZURE),
-      this.getDefaultConfiguration(ModelProvider.AWS)
+      this.getDefaultConfiguration(ModelProvider.OPENAI)
     ];
+  }
+  async saveProviderConfiguration(config: ProviderConfiguration): Promise<Result<void, string>> {
+    try {
+      // Create sanitized config without sensitive data
+      const sanitizedConfig = { ...config };
+      delete sanitizedConfig.apiKey; // Never store API keys
+
+      const currentConfigs = this.configurations();
+      const updatedConfigs = [...currentConfigs];
+      
+      // Update or add configuration
+      const existingIndex = updatedConfigs.findIndex(c => c.provider === config.provider);
+      if (existingIndex >= 0) {
+        updatedConfigs[existingIndex] = sanitizedConfig;
+      } else {
+        updatedConfigs.push(sanitizedConfig);
+      }
+
+      // Update signal first
+      this.configurations.set(updatedConfigs);
+
+      // Then persist to storage
+      const serialized = JSON.stringify(updatedConfigs);
+      this.browserStorage.setItem(this.STORAGE_KEY, serialized);
+      
+      this.logging.info('Provider configuration saved (excluding sensitive data)', 'ProviderConfig', { provider: config.provider });
+      return Result.success(undefined);
+    } catch (error) {
+      this.logging.error('Failed to save provider configuration', error as Error, 'ProviderConfig');
+      return Result.failure('Failed to save provider configuration');
+    }
+  }  // ApiKey value object conversion helpers
+  private readonly apiKeyMap = signal<Map<ModelProvider, ApiKey>>(new Map());
+
+  private convertToApiKey(apiKeyStr: string | undefined): ApiKey | undefined {
+    if (!apiKeyStr) {
+      return undefined;
+    }
+    try {
+      return ApiKey.fromString(apiKeyStr);
+    } catch (error) {
+      this.logging.warn('Invalid API key format');
+      return undefined;
+    }
+  }
+
+  private convertToApiKeyString(apiKey: ApiKey | undefined): string | undefined {
+    if (!apiKey) {
+      return undefined;
+    }
+    return apiKey.getValue();
+  }
+
+  // API key management
+  setApiKey(provider: ModelProvider, apiKey: string | undefined): void {
+    if (!apiKey) {
+      const currentMap = new Map(this.apiKeyMap());
+      currentMap.delete(provider);
+      this.apiKeyMap.set(currentMap);
+      return;
+    }
+
+    const convertedKey = this.convertToApiKey(apiKey);
+    if (convertedKey) {
+      const currentMap = new Map(this.apiKeyMap());
+      currentMap.set(provider, convertedKey);
+      this.apiKeyMap.set(currentMap);
+    }
+  }
+
+  getApiKey(provider: ModelProvider): ApiKey | undefined {
+    return this.apiKeyMap().get(provider);
   }
 }

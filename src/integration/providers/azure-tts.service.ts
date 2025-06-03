@@ -1,8 +1,18 @@
-import { Injectable, signal, computed, effect } from "@angular/core";
+import { Injectable, signal, computed, Inject, PLATFORM_ID } from "@angular/core";
 import { LoggingService } from "../logging.service";
-import { MonitoringService } from "../monitoring/monitoring.service";
 import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus } from "../../domain/tts.entity";
+import { ApiKey } from "../../domain/value-objects/api-key";
 import { Result } from "../../common/result";
+import { ProviderHealthMetrics, ProviderMonitoringService } from "../monitoring/provider-monitoring.service";
+import { TTSProvider } from "./tts-provider.factory";
+import { isPlatformBrowser } from "@angular/common";
+
+interface AzureSettings extends TTSSettings {
+  region?: string;
+  subscriptionKey?: string;
+  resourceKey?: string;
+  customEndpoint?: string;
+}
 
 export interface AzureVoice {
   name: string;
@@ -37,17 +47,20 @@ export interface AzureSSMLOptions {
 @Injectable({
   providedIn: "root"
 })
-export class AzureTTSService {
+export class AzureTTSService implements TTSProvider {
   private readonly tokenUrl = "https://{{region}}.api.cognitive.microsoft.com/sts/v1.0/issueToken";
   private readonly ttsUrl = "https://{{region}}.tts.speech.microsoft.com/cognitiveservices/v1";
   private readonly voicesUrl = "https://{{region}}.tts.speech.microsoft.com/cognitiveservices/voices/list";
   
   // Reactive signals for state management
   private cachedVoices = signal<AzureVoice[] | null>(null);
-  private cachedToken = signal<{ token: string; expiresAt: number } | null>(null);
+  private cachedToken = signal<{ token: string; expiresAt: number; region: string } | null>(null);
   private isValidated = signal(false);
   private synthesisCount = signal(0);
   private errorCount = signal(0);
+  private lastCheckTime = signal<Date>(new Date());
+  private healthCheckInterval = signal(60000); // 1 minute
+  private readonly initialized = signal(false);
   
   // Computed signals for reactive analytics
   readonly voicesCount = computed(() => this.cachedVoices()?.length ?? 0);
@@ -56,53 +69,60 @@ export class AzureTTSService {
     const errors = this.errorCount();
     return total > 0 ? ((total - errors) / total) * 100 : 0;
   });
+  readonly providerHealth = computed(() => {
+    return {
+      status: this.providerStatus(),
+      successRate: this.successRate(),
+      requestCount: this.synthesisCount()
+    };
+  });
   readonly providerStatus = computed(() => {
-    if (!this.isValidated()) return "unconfigured";
-    const rate = this.successRate();
-    if (rate >= 95) return "healthy";
-    if (rate >= 80) return "degraded";
-    return "unhealthy";
+    const status = !this.isValidated() ? "unconfigured"
+      : this.errorCount() > this.synthesisCount() * 0.5 ? "degraded"
+      : "healthy";
+
+    if (status === "degraded") {
+      this.logging.warn(`Azure provider status: ${status}`, "Azure", {
+        synthesisCount: this.synthesisCount(),
+        errorCount: this.errorCount(),
+        successRate: this.successRate()
+      });
+    }
+
+    this.updateProviderHealth();
+    return status;
+  });
+
+  readonly tokenStatus = computed(() => {
+    const tokenData = this.cachedToken();
+    if (!tokenData) return { isValid: false, timeToExpiry: 0 };
+    
+    const now = Date.now();
+    const isValid = now < tokenData.expiresAt;
+    const timeToExpiry = Math.max(0, tokenData.expiresAt - now);
+    
+    return { isValid, timeToExpiry };
   });
 
   constructor(
     private logging: LoggingService,
-    private monitoring: MonitoringService
+    private providerMonitoring: ProviderMonitoringService,
+    @Inject(PLATFORM_ID) private platformId: object
   ) {
-    this.logging.info("AzureTTSService initialized", "Azure");
-    
-    // Effect for provider health monitoring
-    effect(() => {
-      const status = this.providerStatus();
-      const rate = this.successRate();
-      const count = this.synthesisCount();
-      
-      if (count > 0) {
-        this.logging.info(`Azure TTS provider status: ${status} (${rate.toFixed(1)}% success rate)`, "Azure");
-        
-        if (status === "unhealthy") {
-          this.logging.warn("Azure TTS provider performance degraded", "Azure", {
-            successRate: rate,
-            totalRequests: count,
-            errors: this.errorCount()
-          });
-        }
-      }
-    });
+    if (!this.initialized() && isPlatformBrowser(this.platformId)) {
+      this.initialized.set(true);
+      this.logging.info("AzureTTSService initialized", "Azure");
+    }
   }
 
   // Core TTS functionality
   async synthesizeSpeech(
     text: string,
-    settings: TTSSettings,
+    settings: AzureSettings,
     queryId: QueryId
   ): Promise<Result<TTSResult, string>> {
     if (!settings.apiKey) {
       return Result.failure("Azure API key is required");
-    }
-    
-    const region = this.extractRegionFromSettings(settings);
-    if (!region) {
-      return Result.failure("Azure region could not be determined from voice name");
     }
 
     return this.logging.trackPerformance(
@@ -113,16 +133,26 @@ export class AzureTTSService {
         this.logging.info("Starting Azure synthesis", "Azure", {
           textLength: text.length,
           voice: settings.voice,
-          region
+          apiRegion: settings.region
         });
 
         try {
-          const audioData = await this.makeTextToSpeechRequest(text, settings, region);
+          // Generate SSML
+          const ssml = await this.generateSSML(text, settings);
+
+          // Get access token
+          const tokenResult = await this.getAccessToken(settings);
+          if (tokenResult.isFailure()) {
+            throw new Error(tokenResult.getError());
+          }
+
+          // Make TTS request
+          const audioData = await this.makeTextToSpeechRequest(ssml, settings);
           const processingTime = Date.now() - startTime;
 
-          this.monitoring.recordRequest("azure_synthesis", processingTime, true, ModelProvider.AZURE);
           this.synthesisCount.update(count => count + 1);
-          
+          this.updateProviderHealth();
+
           const result: TTSResult = {
             queryId,
             status: TTSResultStatus.COMPLETED,
@@ -144,12 +174,12 @@ export class AzureTTSService {
 
         } catch (error) {
           const processingTime = Date.now() - startTime;
-          this.monitoring.recordRequest("azure_synthesis", processingTime, false, ModelProvider.AZURE);
           this.errorCount.update(count => count + 1);
+          this.updateProviderHealth();
 
           const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
           this.logging.error("Azure synthesis failed", error as Error, "Azure");
-          
+
           const result: TTSResult = {
             queryId,
             status: TTSResultStatus.FAILED,
@@ -171,7 +201,7 @@ export class AzureTTSService {
   }
 
   // Voice management
-  async getAvailableVoices(apiKey: string, region: string): Promise<Result<AzureVoice[], string>> {
+  async getAvailableVoices(settings: AzureSettings): Promise<Result<AzureVoice[], string>> {
     const cachedVoicesValue = this.cachedVoices();
     if (cachedVoicesValue) {
       return Result.success(cachedVoicesValue);
@@ -181,13 +211,13 @@ export class AzureTTSService {
       "azureGetVoices",
       async () => {
         try {
-          const token = await this.getAccessToken(apiKey, region);
+          const token = await this.getAccessToken(settings);
           
           if (token.isFailure()) {
             return Result.failure(token.getError());
           }
 
-          const url = this.voicesUrl.replace("{{region}}", region);
+          const url = this.voicesUrl.replace("{{region}}", settings.region || "eastus");
           const response = await fetch(url, {
             headers: {
               "Authorization": `Bearer ${token.getValue()}`,
@@ -215,209 +245,164 @@ export class AzureTTSService {
     );
   }
 
-  // Token management
-  async getAccessToken(apiKey: string, region: string): Promise<Result<string, string>> {
-    // Check if we have a valid cached token
-    const tokenData = this.cachedToken();
-    if (tokenData && Date.now() < tokenData.expiresAt) {
-      return Result.success(tokenData.token);
-    }
-
-    return this.logging.trackPerformance(
-      "azureGetToken",
-      async () => {
-        try {
-          const url = this.tokenUrl.replace("{{region}}", region);
-          const response = await fetch(url, {
-            method: "POST",
-            headers: {
-              "Ocp-Apim-Subscription-Key": apiKey,
-              "Content-Type": "application/x-www-form-urlencoded"
-            }
-          });
-
-          if (!response.ok) {
-            throw new Error(`Failed to get access token: ${response.status} ${response.statusText}`);
-          }
-
-          const token = await response.text();
-          
-          // Cache token for 9 minutes (Azure tokens expire in 10 minutes)
-          this.cachedToken.set({
-            token,
-            expiresAt: Date.now() + (9 * 60 * 1000)
-          });
-
-          this.logging.info("Azure access token obtained successfully", "Azure");
-          return Result.success(token);
-
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : "Failed to get access token";
-          this.logging.error("Failed to get Azure access token", error as Error, "Azure");
-          return Result.failure(errorMessage);
-        }
-      },
-      "Azure"
-    );
-  }
-
-  // SSML generation
-  generateSSML(text: string, voice: string, options?: AzureSSMLOptions): string {
-    let ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US">`;
-    ssml += `<voice name="${voice}">`;
-
-    if (options?.prosody) {
-      ssml += "<prosody";
-      if (options.prosody.rate) ssml += ` rate="${options.prosody.rate}"`;
-      if (options.prosody.pitch) ssml += ` pitch="${options.prosody.pitch}"`;
-      if (options.prosody.volume) ssml += ` volume="${options.prosody.volume}"`;
-      if (options.prosody.contour) ssml += ` contour="${options.prosody.contour}"`;
-      ssml += ">";
-    }
-
-    if (options?.emphasis) {
-      ssml += `<emphasis level="${options.emphasis}">`;
-    }
-
-    ssml += text;
-
-    if (options?.emphasis) {
-      ssml += "</emphasis>";
-    }
-
-    if (options?.prosody) {
-      ssml += "</prosody>";
-    }
-
-    ssml += "</voice></speak>";
-    return ssml;
-  }
-
   // Validation and capabilities
-  async validateConfiguration(settings: TTSSettings): Promise<Result<boolean, string>> {
-    if (!settings.apiKey) {
-      this.isValidated.set(false);
-      return Result.failure("API key is required");
-    }
-    
-    const region = this.extractRegionFromSettings(settings);
-    if (!region) {
-      this.isValidated.set(false);
-      return Result.failure("Region could not be determined from voice name");
-    }
-    
-    // Test API key by getting access token
-    const tokenResult = await this.getAccessToken(settings.apiKey.getValue(), region);
-    if (tokenResult.isFailure()) {
-      this.isValidated.set(false);
-      return Result.failure(`Invalid API key or region: ${tokenResult.getError()}`);
-    }
+  async validateConfiguration(settings: AzureSettings): Promise<Result<boolean, string>> {
+    try {
+      this.logging.info('Validating Azure configuration', 'Azure');
 
-    this.isValidated.set(true);
-    this.logging.info("Azure configuration validated successfully", "Azure");
-    return Result.success(true);
+      if (!settings.apiKey?.getValue()) {
+        this.isValidated.set(false);
+        return Result.failure('Azure API key is required');
+      }
+
+      if (!settings.region) {
+        this.isValidated.set(false);
+        return Result.failure('Azure region is required');
+      }
+
+      // Test credentials by fetching access token
+      const tokenResult = await this.getAccessToken(settings);
+      if (tokenResult.isFailure()) {
+        this.isValidated.set(false);
+        this.updateProviderHealth();
+        return Result.failure(`Invalid Azure credentials: ${tokenResult.getError()}`);
+      }
+
+      this.isValidated.set(true);
+      this.updateProviderHealth();
+      this.logging.info('Azure configuration validated successfully', 'Azure');
+      return Result.success(true);
+
+    } catch (error) {
+      this.isValidated.set(false);
+      this.updateProviderHealth();
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logging.error('Azure configuration validation failed', error as Error, 'Azure');
+      return Result.failure(`Configuration validation error: ${errorMessage}`);
+    }
   }
 
   getCapabilities() {
     return {
-      maxTextLength: 10000, // Azure limit for SSML
-      supportedFormats: ["mp3", "wav", "ogg"],
+      maxTextLength: 1000, // Azure TTS character limit
+      supportedFormats: ['mp3', 'wav', 'webm', 'ogg'],
       supportsSSML: true,
-      supportsStreaming: false,
-      defaultModel: "Neural", // Azure uses voice types instead of models
-      defaultVoice: "en-US-JennyNeural",
+      supportsStreaming: true,
+      defaultModel: 'tts',
+      defaultVoice: 'en-US-AriaNeural',
       requiresApiKey: true,
-      requiresRegion: true
+      requiresRegion: true,
+      features: {
+        customVoices: false,
+        voiceCloning: false,
+        emotionalTones: true,
+        languageDetection: true,
+        ssmlSupport: true
+      }
     };
   }
 
-  // Supported regions
-  getSupportedRegions(): string[] {
-    return [
-      "eastus", "eastus2", "westus", "westus2", "westus3", "centralus",
-      "northcentralus", "southcentralus", "westcentralus", "canadacentral",
-      "canadaeast", "brazilsouth", "northeurope", "westeurope", "uksouth",
-      "ukwest", "francecentral", "francesouth", "switzerlandnorth",
-      "switzerlandwest", "germanywestcentral", "norwayeast", "norwaywest",
-      "swedencentral", "eastasia", "southeastasia", "australiaeast",
-      "australiasoutheast", "centralindia", "southindia", "westindia",
-      "japaneast", "japanwest", "koreacentral", "koreasouth", "southafricanorth",
-      "uaenorth"
-    ];
-  }
-
-  // Clear caches
-  clearCache(): void {
-    this.cachedVoices.set(null);
-    this.cachedToken.set(null);
-    this.logging.info("Azure cache cleared", "Azure");
-  }
-  
   // Private helper methods
-  private async makeTextToSpeechRequest(
-    text: string, 
-    settings: TTSSettings, 
-    region: string
-  ): Promise<Uint8Array> {
-    const token = await this.getAccessToken(settings.apiKey!.getValue(), region);
-    if (token.isFailure()) {
-      throw new Error(`Failed to get access token: ${token.getError()}`);
+  private async getAccessToken(settings: AzureSettings): Promise<Result<string, string>> {
+    if (!settings.apiKey || !settings.region) {
+      return Result.failure("API key and region are required");
     }
 
-    const voice = settings.voice || "en-US-JennyNeural";
-    const ssml = this.generateSSML(text, voice);
+    // Check computed token status for the given region
+    const status = this.tokenStatus();
+    const tokenData = this.cachedToken();
+    
+    if (status.isValid && tokenData && tokenData.region === settings.region) {
+      return Result.success(tokenData.token);
+    }
 
-    const url = this.ttsUrl.replace("{{region}}", region);
+    try {
+      const url = this.tokenUrl.replace("{{region}}", settings.region);
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Ocp-Apim-Subscription-Key": settings.apiKey.getValue()
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get access token: ${response.status} ${response.statusText}`);
+      }
+
+      const token = await response.text();
+      this.cachedToken.set({
+        token,
+        region: settings.region,
+        expiresAt: Date.now() + 9 * 60 * 1000 // Token expires in 10 minutes, refresh after 9
+      });
+
+      return Result.success(token);
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to get access token";
+      this.logging.error("Failed to get Azure access token", error as Error, "Azure");
+      return Result.failure(errorMessage);
+    }
+  }
+
+  private async generateSSML(text: string, settings: AzureSettings): Promise<string> {
+    const voice = settings.voice || "en-US-JennyNeural";
+    let ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US">`;
+    ssml += `<voice name="${voice}">`;
+    ssml += text;
+    ssml += "</voice>";
+    ssml += "</speak>";
+    return ssml;
+  }
+
+  private async makeTextToSpeechRequest(
+    ssml: string,
+    settings: AzureSettings
+  ): Promise<Uint8Array> {
+    const token = await this.getAccessToken(settings);
+    if (token.isFailure()) {
+      throw new Error(token.getError());
+    }
+
+    const url = this.ttsUrl.replace("{{region}}", settings.region || "eastus");
     const response = await fetch(url, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${token.getValue()}`,
         "Content-Type": "application/ssml+xml",
-        "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
-        "User-Agent": "ai-tts-mp3"
+        "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3"  
       },
       body: ssml
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Azure API error: ${response.status} ${response.statusText} - ${errorText}`);
+      throw new Error(`TTS request failed: ${response.status} ${response.statusText}`);
     }
 
     const arrayBuffer = await response.arrayBuffer();
     return new Uint8Array(arrayBuffer);
   }
-  
-  private extractRegionFromSettings(settings: TTSSettings): string | null {
-    // Since TTSSettings doesn"t have customEndpoint, we"ll need to infer the region
-    // from the voice name or use a default region
-    
-    // Try to extract from voice name (many Azure voices include region)
-    if (settings.voice) {
-      const voiceRegionMatch = settings.voice.match(/^([a-z]{2}-[A-Z]{2})-/);
-      if (voiceRegionMatch) {
-        // Map locale to common regions (this is a simplified mapping)
-        const localeToRegion: Record<string, string> = {
-          "en-US": "eastus",
-          "en-GB": "uksouth",
-          "fr-FR": "francecentral",
-          "de-DE": "germanywestcentral",
-          "ja-JP": "japaneast",
-          "ko-KR": "koreacentral",
-          "zh-CN": "eastasia"
-        };
-        const locale = voiceRegionMatch[1];
-        return localeToRegion[locale] || "eastus";
-      }
-    }
-
-    // Default to eastus if no region found
-    return "eastus";
-  }
 
   private estimateAudioDuration(audioData: Uint8Array): number {
     // Rough estimation for MP3: assumes 48kbps bitrate (Azure default)
     const bytesPerSecond = 48 * 1024 / 8; // 48kbps in bytes per second
-    return audioData.byteLength / bytesPerSecond;
+    return Math.round(audioData.byteLength / bytesPerSecond);
+  }
+  private updateProviderHealth(): void {
+    const metrics: ProviderHealthMetrics = {
+      status: this.providerStatus(),
+      synthesisCount: this.synthesisCount(),
+      errorCount: this.errorCount(),
+      successRate: this.successRate(),
+      lastCheckTime: this.lastCheckTime()
+    };
+
+    this.providerMonitoring.updateProviderMetrics(ModelProvider.AZURE, metrics);
+  }
+
+  clearCache(): void {
+    this.cachedVoices.set(null);
+    this.cachedToken.set(null);
+    this.logging.info("Azure cache cleared", "Azure");
   }
 }

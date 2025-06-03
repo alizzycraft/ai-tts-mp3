@@ -1,8 +1,9 @@
-import { Component, inject, computed, effect } from '@angular/core';
+import { Component, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SettingsService } from '../../../shared/settings.service';
 import { ModelProvider, Voice } from '../../../../integration/domain-types';
+import { UserPreferencesService } from '../../../../integration/settings/user-preferences.service';
 
 @Component({
   selector: 'app-settings-panel',
@@ -12,8 +13,9 @@ import { ModelProvider, Voice } from '../../../../integration/domain-types';
   styleUrl: './settings-panel.component.scss'
 })
 export class SettingsPanelComponent {
-  // Inject the settings service
+  // Inject the services
   public readonly settingsService = inject(SettingsService);
+  private readonly userPreferences = inject(UserPreferencesService);
 
   // Expose ModelProvider enum for template
   readonly ModelProvider = ModelProvider;
@@ -26,6 +28,12 @@ export class SettingsPanelComponent {
   readonly providers = computed(() => this.settingsService.providers);
   readonly models = computed(() => this.settingsService.models());
   readonly voices = computed(() => this.settingsService.voices());
+  readonly enableMetrics = computed(() => this.userPreferences.getPreference('enableMetrics'));
+
+  constructor() {
+    // Load saved settings when component initializes - no effect needed
+    this.settingsService.loadSavedSettings();
+  }
 
   // Public methods for template access
   updateProvider(provider: ModelProvider) {
@@ -45,12 +53,9 @@ export class SettingsPanelComponent {
     this.settingsService.updateApiKey(key);
   }
 
-  constructor() {
-    // Set up effects
-    effect(() => {
-      // Load saved settings when component initializes
-      this.settingsService.loadSavedSettings();
-    });
+  async toggleMetrics(event: Event) {
+    const checkbox = event.target as HTMLInputElement;
+    await this.userPreferences.updatePreference('enableMetrics', checkbox.checked);
   }
 
   private onProviderChange() {

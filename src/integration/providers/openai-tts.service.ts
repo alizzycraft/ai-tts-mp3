@@ -1,11 +1,12 @@
 // OpenAI TTS provider implementation
-import { Injectable, signal, computed, effect } from '@angular/core';
+import { Injectable, signal, computed, Inject, PLATFORM_ID } from '@angular/core';
 import { LoggingService } from '../logging.service';
-import { MonitoringService } from '../monitoring.service';
+import { ProviderHealthMetrics, ProviderMonitoringService } from '../monitoring/provider-monitoring.service';
 import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus, QueryText } from '../../domain/tts.entity';
 import { Result } from '../../common/result';
 import { OpenAITTSService } from '../../infrastructure/providers/openai/openai-tts.service';
 import { TTSProvider } from './tts-provider.factory';
+import { isPlatformBrowser } from '@angular/common';
 
 export interface OpenAISettings extends TTSSettings {
   speed?: number; // 0.25 to 4.0
@@ -43,6 +44,8 @@ export class OpenAITTSProviderService implements TTSProvider {
   private lastValidationTime = signal<Date | null>(null);
   private synthesisCount = signal(0);
   private errorCount = signal(0);
+  private lastCheckTime = signal<Date>(new Date());
+  private initialized = signal(false);
   
   // Computed signals for reactive derived data
   readonly cacheSize = computed(() => this.cache().size);
@@ -51,22 +54,49 @@ export class OpenAITTSProviderService implements TTSProvider {
     const errors = this.errorCount();
     return total > 0 ? ((total - errors) / total) * 100 : 100;
   });
+  
   readonly cacheHitRate = computed(() => {
     // This would be tracked separately in a real implementation
     return this.cacheSize() > 0 ? 25 : 0; // Estimate
   });
+
+  readonly cacheStatus = computed(() => {
+    const now = new Date();
+    this.lastCheckTime.set(now); // Trigger periodic recomputation
+    
+    if (this.cacheSize() > 100) {
+      this.cleanupExpiredCache();
+    }
+    
+    return {
+      size: this.cacheSize(),
+      hitRate: this.cacheHitRate()
+    };
+  });
+  
   readonly providerStatus = computed(() => {
-    if (!this.isValidated()) return 'unconfigured';
-    if (this.errorCount() > this.synthesisCount() * 0.5) return 'degraded';
-    return 'healthy';
+    const status = !this.isValidated() ? 'unconfigured' 
+      : this.errorCount() > this.synthesisCount() * 0.5 ? 'degraded' 
+      : 'healthy';
+
+    // Update provider monitoring service
+    this.providerMonitoring.updateProviderMetrics(ModelProvider.OPENAI, {
+      synthesisCount: this.synthesisCount(),
+      errorCount: this.errorCount(),
+      successRate: this.successRate(),
+      lastCheckTime: this.lastCheckTime(),
+      status: status as any
+    });
+
+    return status;
   });
   
   private readonly capabilities: OpenAICapabilities;
   private readonly openaiService: OpenAITTSService;
 
   constructor(
-    private logging: LoggingService,
-    private monitoring: MonitoringService
+    private logging: LoggingService,    private providerMonitoring: ProviderMonitoringService,
+    @Inject(PLATFORM_ID) private platformId: object
   ) {
     this.openaiService = new OpenAITTSService();
     this.capabilities = {
@@ -89,26 +119,27 @@ export class OpenAITTSProviderService implements TTSProvider {
       }
     };
 
-    // Reactive effects for cache management and monitoring
-    effect(() => {
-      const size = this.cacheSize();
-      if (size > 100) { // Clear cache if it gets too large
-        this.cleanupExpiredCache();
-      }
-    });
-    
-    effect(() => {
-      const status = this.providerStatus();
-      this.logging.debug(`OpenAI provider status: ${status}`, 'OpenAITTSService', {
-        synthesisCount: this.synthesisCount(),
-        errorCount: this.errorCount(),
-        successRate: this.successRate()
-      });
-    });
-
-    this.logging.info('OpenAI TTS provider initialized', 'OpenAITTSService');
+    if (!this.initialized() && isPlatformBrowser(this.platformId)) {
+      this.initialized.set(true);
+      this.logging.info('OpenAI TTS provider initialized', 'OpenAITTSService');
+    }
   }
 
+  private updateProviderHealth(): void {
+    const status = !this.isValidated() ? 'unconfigured' as const
+      : this.errorCount() > this.synthesisCount() * 0.5 ? 'degraded' as const
+      : 'healthy' as const;
+
+    const metrics: ProviderHealthMetrics = {
+      synthesisCount: this.synthesisCount(),
+      errorCount: this.errorCount(),
+      successRate: this.successRate(),
+      lastCheckTime: this.lastCheckTime(),
+      status
+    };
+
+    this.providerMonitoring.updateProviderMetrics(ModelProvider.OPENAI, metrics);
+  }
   /**
    * Synthesize speech using OpenAI TTS API
    */
@@ -125,14 +156,17 @@ export class OpenAITTSProviderService implements TTSProvider {
         textLength: text.length,
         model: settings.model,
         voice: settings.voice
-      });      // Check cache first
+      });
+
+      // Check cache first
       const cacheKey = this.generateCacheKey(text, settings);
       const cachedResult = this.getCachedResult(cacheKey);
       if (cachedResult) {
         this.logging.info('Returning cached OpenAI TTS result', 'OpenAITTSService', {
           queryId: queryId.getValue()
         });
-        this.monitoring.recordRequest('openai_cache_hit', Date.now() - startTime, true, ModelProvider.OPENAI);
+        // Update metrics for cache hit
+        this.updateProviderHealth();
         return Result.success(cachedResult);
       }
 
@@ -140,7 +174,7 @@ export class OpenAITTSProviderService implements TTSProvider {
       const validationResult = await this.validateConfiguration(settings);
       if (validationResult.isFailure()) {
         this.errorCount.update(count => count + 1);
-        this.monitoring.recordRequest('openai_validation', Date.now() - startTime, false, ModelProvider.OPENAI);
+        this.updateProviderHealth(); // Update metrics after validation failure
         return Result.failure(validationResult.getError());
       }
 
@@ -164,12 +198,14 @@ export class OpenAITTSProviderService implements TTSProvider {
       // Cache the result
       this.cacheResult(cacheKey, result);
       this.synthesisCount.update(count => count + 1);
+      this.updateProviderHealth(); // Update metrics after successful synthesis
 
       this.logging.info('OpenAI TTS synthesis completed successfully', 'OpenAITTSService', {
         queryId: queryId.getValue(),
         audioSize: audioData.length,
         duration
-      });        this.monitoring.recordRequest('openai_synthesis', Date.now() - startTime, true, ModelProvider.OPENAI);
+      });
+
       return Result.success(result);
 
     } catch (error) {
@@ -178,8 +214,7 @@ export class OpenAITTSProviderService implements TTSProvider {
         queryId: queryId.getValue(),
         textLength: text.length
       });
-
-      this.monitoring.recordRequest('openai_synthesis', Date.now() - startTime, false, ModelProvider.OPENAI);
+      this.updateProviderHealth(); // Update metrics after synthesis failure
 
       // Create failed result
       const failedResult: TTSResult = {
@@ -228,13 +263,12 @@ export class OpenAITTSProviderService implements TTSProvider {
       const isValidKey = await this.openaiService.validateApiKey(settings.apiKey.getValue());
       if (!isValidKey) {
         return Result.failure('Invalid OpenAI API key or insufficient permissions');
-      }
-
-      // Update validation status
+      }      // Update validation status
       this.isValidated.set(true);
       this.lastValidationTime.set(new Date());
 
       this.logging.info('OpenAI configuration validation successful', 'OpenAITTSService');
+      this.updateProviderHealth(); // Update metrics after successful validation
       return Result.success(true);
 
     } catch (error) {
@@ -264,21 +298,21 @@ export class OpenAITTSProviderService implements TTSProvider {
    * Clean up expired cache entries
    */
   private cleanupExpiredCache(): void {
-    const currentCache = this.cache();
     const now = Date.now();
     const duration = this.cacheDuration();
+    const currentCache = this.cache();
     
-    const cleanedCache = new Map();
-    for (const [key, entry] of currentCache.entries()) {
-      if (now - entry.timestamp <= duration) {
-        cleanedCache.set(key, entry);
-      }
-    }
+    // Create new Map with only non-expired entries
+    const newCache = new Map(
+      Array.from(currentCache.entries())
+        .filter(([_, { timestamp }]) => now - timestamp < duration)
+    );
     
-    this.cache.set(cleanedCache);
-    this.logging.debug('Cleaned up expired cache entries', 'OpenAITTSService', {
-      before: currentCache.size,
-      after: cleanedCache.size
+    this.cache.set(newCache);
+    
+    this.logging.debug('Cache cleanup completed', 'OpenAITTSService', {
+      beforeSize: currentCache.size,
+      afterSize: newCache.size
     });
   }
 
@@ -306,8 +340,7 @@ export class OpenAITTSProviderService implements TTSProvider {
 
   /**
    * Cache synthesis result
-   */
-  private cacheResult(cacheKey: string, result: TTSResult): void {
+   */  private cacheResult(cacheKey: string, result: TTSResult): void {    // Clone result for caching, no sensitive data to remove as it's not stored
     const currentCache = this.cache();
     const newCache = new Map(currentCache);
     newCache.set(cacheKey, {
@@ -319,10 +352,11 @@ export class OpenAITTSProviderService implements TTSProvider {
 
   /**
    * Generate cache key for text and settings
-   */
-  private generateCacheKey(text: string, settings: OpenAISettings): string {
-    const settingsHash = `${settings.model}:${settings.voice}:${settings.speed || 1.0}:${settings.responseFormat || 'mp3'}`;
-    return `openai:${Buffer.from(text).toString('base64')}:${settingsHash}`;
+   */  private generateCacheKey(text: string, settings: TTSSettings): string {
+    const model = settings.model || 'tts-1';
+    const voice = settings.voice || 'alloy';
+    const settingsHash = `${model}:${voice}:1.0:mp3`;
+    return `openai:${btoa(encodeURIComponent(text))}:${settingsHash}`;
   }
   /**
    * Estimate audio duration based on text length

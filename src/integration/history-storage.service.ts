@@ -19,45 +19,50 @@ import { Observable } from 'rxjs';
 @Injectable({
   providedIn: 'root'
 })
-export class IntegratedHistoryStorageService {  constructor(
+export class IntegratedHistoryStorageService {
+  private initialized = false;
+
+  constructor(
     @Inject(PLATFORM_ID) private platformId: object,
     private logging: LoggingService,
     private monitoring: MonitoringService,
-    // Inject the new, focused storage services
     private historyManagement: HistoryManagementService,
     private fileSystemManager: FileSystemStorageManagerService,
     private storageState: StorageStateService,
     private storageInfo: StorageInfoService
   ) {
-    this.logging.info('IntegratedHistoryStorageService initialized', 'History');
     if (this.isBrowser) {
-      // Delegate initialization to FileSystemStorageManagerService and handle its response
-      this.initializeFileSystemStorage();
+      // Only initialize in browser context
+      this.initializeServices().catch(error => 
+        this.logging.error('Failed to initialize history storage', error as Error, 'History')
+      );
     }
   }
 
-  private async initializeFileSystemStorage() {
-    try {
-      // Initialize and get response about user interaction
-      const initResult = await this.fileSystemManager.initializeService();
-      this.logging.debug('FileSystem storage initialization result:', 'History', initResult);
-
-      if (!initResult.success) {
-        this.logging.warn('FileSystem storage initialization failed', 'History');
-        return;
-      }
-
-      // If we're waiting for user response, let the modal+reconnection flow handle loading
-      if (initResult.waitingForUser) {
-        this.logging.debug('Waiting for user response to reconnection prompt', 'History');
-        return;
-      }
-
-      // Otherwise we've loaded successfully (either with or without filesystem access)
-      this.logging.info('FileSystem storage initialized successfully', 'History');
-    } catch (error) {
-      this.logging.error('Error during file system initialization', error as Error, 'History');
+  private async initializeServices() {
+    if (this.initialized) {
+      this.logging.debug('History storage already initialized', 'History');
+      return;
     }
+
+    this.initialized = true;
+    this.logging.info('Initializing history storage', 'History');
+
+    // Delegate initialization to FileSystemStorageManagerService and handle its response
+    const initResult = await this.fileSystemManager.initializeService();
+
+    if (!initResult.success) {
+      this.logging.warn('FileSystem storage initialization failed', 'History');
+      return;
+    }
+
+    if (initResult.waitingForUser) {
+      this.logging.debug('Waiting for user response to reconnection prompt', 'History');
+      return;
+    }
+
+    // Otherwise we've loaded successfully
+    this.logging.debug('History storage initialized successfully', 'History');
   }
 
   /** true only when running in a browser (not during SSR) */

@@ -1,14 +1,13 @@
 // Health checking service focused on application health monitoring
-import { Injectable, Inject, PLATFORM_ID, signal, computed, effect } from '@angular/core';
+import { Injectable, Inject, PLATFORM_ID, signal, computed } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { LoggingService } from '../logging.service';
 import { ProviderConfigurationService } from '../settings/provider-configuration.service';
-// import { ModelProvider } from '../../domain/tts.entity'; // Removed unused import
-// import { ProviderConfiguration } from '../settings/provider-configuration.service'; // Removed unused import
+import { ModelProvider } from '../../domain/tts.entity';
 
 // Define a local interface for Performance that includes the non-standard memory property
 interface PerformanceWithMemory extends Performance {
-  memory?: { // Use optional chaining as it might not exist
+  memory?: {
     usedJSHeapSize: number;
     totalJSHeapSize: number;
     jsHeapSizeLimit: number;
@@ -19,14 +18,23 @@ export interface HealthStatus {
   status: 'healthy' | 'degraded' | 'unhealthy';
   checks: HealthCheck[];
   lastUpdated: Date;
-  uptime: number; // milliseconds
+  uptime: number;
 }
 
 export interface HealthCheck {
   name: string;
   status: 'pass' | 'fail' | 'warn';
   message?: string;
-  duration?: number; // milliseconds
+  duration?: number;
+  lastChecked: Date;
+  provider?: ModelProvider;
+}
+
+export interface ProviderHealthStatus {
+  provider: ModelProvider;
+  status: 'pass' | 'fail' | 'warn';
+  message: string;
+  duration?: number;
   lastChecked: Date;
 }
 
@@ -34,11 +42,16 @@ export interface HealthCheck {
   providedIn: 'root'
 })
 export class HealthCheckService {
+  // Static initialization guard
+  private static isInitialized = false;
+  
   private startTime = new Date();
   private isBrowser = false;
+  
   // Signals for reactive health monitoring
   private healthChecks = signal(new Map<string, HealthCheck>());
   private lastHealthCheckRun = signal(new Date());
+  private providerChecks = signal(new Map<ModelProvider, ProviderHealthStatus>());
 
   // Computed signal for health status
   readonly healthStatus = computed(() => {
@@ -55,9 +68,7 @@ export class HealthCheckService {
   });
 
   // Computed signal for overall health status
-  readonly overallStatus = computed(() => {
-    return this.healthStatus().status;
-  });
+  readonly overallStatus = computed(() => this.healthStatus().status);
 
   // Computed signal for critical health checks
   readonly criticalChecks = computed(() => {
@@ -65,47 +76,114 @@ export class HealthCheckService {
     return checks.filter(check => check.status === 'fail');
   });
 
+  // Computed signal for provider health status
+  readonly providerHealth = computed(() => Array.from(this.providerChecks().values()));
+
   constructor(
     @Inject(PLATFORM_ID) platformId: object,
     private logging: LoggingService,
     private providerConfig: ProviderConfigurationService
   ) {
+    if (HealthCheckService.isInitialized) {
+      this.logging.debug('HealthCheckService already initialized', 'HealthCheck');
+      return;
+    }
+
+    HealthCheckService.isInitialized = true;
     this.isBrowser = isPlatformBrowser(platformId);
     
-    if (this.isBrowser) {
-      // Effect to log health status changes
-      effect(() => {
-        const status = this.overallStatus();
-        const criticalCount = this.criticalChecks().length;
-        
-        if (criticalCount > 0) {
-          this.logging.warn(`Health status: ${status} (${criticalCount} critical issues)`, 'HealthCheck');
-        }
-      });
-
-      // Run health checks every 5 minutes
-      setInterval(() => this.runHealthChecks(), 5 * 60 * 1000);
-      
-      // Initial health check
-      this.runHealthChecks();
-    }
+    // Provider health checks are now performed manually through testProviderConnectivity()
+    this.logging.info('HealthCheckService initialized - Provider health checks will be performed manually', 'HealthCheck');
   }
+
   async getHealthStatus(): Promise<HealthStatus> {
-    // Return the computed signal value
     return this.healthStatus();
   }
 
-  async runHealthChecks(): Promise<void> {
+  async getProviderHealth(): Promise<ProviderHealthStatus[]> {
+    return this.providerHealth();
+  }
+
+  /**
+   * Run system health checks excluding provider connectivity
+   */
+  async runSystemHealthChecks(): Promise<void> {
     if (!this.isBrowser) return;
 
     const checkPromises = [
       this.checkLocalStorage(),
       this.checkMemoryUsage(),
-      this.checkProviderConnectivity(),
       this.checkAudioSupport()
     ];
 
     await Promise.allSettled(checkPromises);
+  }
+
+  /**
+   * Test provider connectivity manually
+   * This method is called by the UI when the user clicks "Test Connection"
+   */  async testProviderConnectivity(provider: ModelProvider): Promise<ProviderHealthStatus> {
+    const startTime = Date.now();
+    
+    try {
+      // Get provider configuration
+      const configResult = this.providerConfig.getProviderConfiguration(provider);
+      if (configResult.isFailure()) {
+        throw new Error(`Failed to get provider configuration: ${configResult.getError()}`);
+      }
+
+      const config = configResult.getValue();
+      if (!config.enabled) {
+        throw new Error('Provider is not enabled');
+      }
+
+      // Test provider configuration
+      const validationResult = await this.providerConfig.validateProviderConfiguration(provider);
+      if (validationResult.isFailure()) {
+        throw new Error(`Failed to validate configuration: ${validationResult.getError()}`);
+      }
+
+      const validation = validationResult.getValue();
+      if (!validation.isValid) {
+        throw new Error(validation.message);
+      }
+
+      // Update status
+      const status: ProviderHealthStatus = {
+        provider,
+        status: 'pass',
+        message: 'Provider connection test passed successfully',
+        duration: Date.now() - startTime,
+        lastChecked: new Date()
+      };
+
+      // Update signals
+      const currentChecks = new Map(this.providerChecks());
+      currentChecks.set(provider, status);
+      this.providerChecks.set(currentChecks);
+      this.lastHealthCheckRun.set(new Date());
+
+      this.logging.info(`Provider connectivity test passed for ${provider}`, 'HealthCheck');
+      return status;
+
+    } catch (error) {
+      const status: ProviderHealthStatus = {
+        provider,
+        status: 'fail',
+        message: `Connectivity test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        duration: Date.now() - startTime,
+        lastChecked: new Date()
+      };
+
+      // Update signals
+      const currentChecks = new Map(this.providerChecks());
+      currentChecks.set(provider, status);
+      this.providerChecks.set(currentChecks);
+      this.lastHealthCheckRun.set(new Date());
+
+      this.logging.error(`Provider connectivity test failed for ${provider}`, error as Error, 'HealthCheck');
+      return status;
+    }
   }
 
   private async checkLocalStorage(): Promise<void> {
@@ -180,41 +258,6 @@ export class HealthCheckService {
         status: 'fail',
         message: `Memory check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         duration: Date.now() - startTime,
-        lastChecked: new Date()
-      });
-    }
-  }
-
-  private async checkProviderConnectivity(): Promise<void> {
-    try {
-      // Use the correct public method to get available providers
-      const enabledProviders = this.providerConfig.getAvailableProviders();
-
-      // const providerCount = enabledProviders.length; // Removed unused variable
-      // const failedProviders: string[] = []; // Not needed with this approach
-
-      // TODO: Implement actual provider connectivity check logic
-      console.warn('[HealthCheckService] Provider connectivity check is not fully implemented, checking for configured providers instead.');
-
-      // Update health check state based on whether any providers are enabled
-      const currentChecks = new Map(this.healthChecks());
-      currentChecks.set('provider_configuration', { // Renamed check name
-        name: 'Provider Configuration', // Renamed check name
-        status: enabledProviders.length > 0 ? 'pass' : 'warn', // Assume pass if at least one enabled
-        message: enabledProviders.length > 0 ? 
-                `Configured providers: ${enabledProviders.join(', ')}` : 
-                'No providers are configured.',
-        lastChecked: new Date()
-      });
-
-      this.healthChecks.set(currentChecks);
-      this.lastHealthCheckRun.set(new Date());
-
-    } catch (error) {
-      this.updateHealthCheck('provider_configuration', { // Updated check name in catch block
-        name: 'Provider Configuration', // Updated check name in catch block
-        status: 'fail',
-        message: `Provider configuration check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         lastChecked: new Date()
       });
     }

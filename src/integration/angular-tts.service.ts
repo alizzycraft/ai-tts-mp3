@@ -17,9 +17,12 @@ export class AngularTTSService {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async saveSettings(_settings: TTSSettings): Promise<void> {
-    // Placeholder implementation - Settings are currently managed by SettingsService
-    // This could be extended to save settings to localStorage or an API later.
+  async saveSettings(settings: TTSSettings): Promise<void> {
+    // Never persist sensitive data like API keys
+    const { apiKey, ...safeSettings } = settings;
+    
+    // Store only safe settings
+    localStorage.setItem('tts-settings', JSON.stringify(safeSettings));
   }
 
   async generateSpeech(text: string, settings: TTSSettings): Promise<TTSResult | undefined> {

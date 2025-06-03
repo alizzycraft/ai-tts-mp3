@@ -4,6 +4,7 @@ import { HistoryItem } from './storage-types';
 import { TTSResult, TTSSettings, TTSResultStatus, ModelProvider } from '../../domain/tts.entity';
 import { QueryId } from '../../domain/value-objects/query-id';
 import { ApiKey } from '../../domain/value-objects/api-key';
+import { ProviderConfiguration } from '../../domain/provider-configuration';
 
 @Injectable({
   providedIn: 'root'
@@ -133,17 +134,12 @@ export class DataSerializationService {
       audioSize: result.audioData?.byteLength || 0,
       metadata: metadata,
     };
-  }
-  // Sanitize settings before saving (e.g., remove API keys)
-  sanitizeSettings(settings: TTSSettings): TTSSettings {
-    // Return a new object to avoid modifying the original settings object
+  }  // Sanitize settings before saving (e.g., remove API keys)
+  sanitizeSettings<T extends TTSSettings | ProviderConfiguration>(settings: T): T {
     const sanitized = { ...settings };
-    // Remove API key before saving or storing in history
-    if ('apiKey' in sanitized) {
-      delete sanitized.apiKey;
-    }
+    delete (sanitized as any).apiKey;
     return sanitized;
-  }  // Map loaded settings to the correct type/structure
+  }// Map loaded settings to the correct type/structure
   mapLoadedSettings(settings: Record<string, unknown>): TTSSettings {
     // Perform mapping and type assertions as needed based on your loaded data structure
     const mappedSettings: TTSSettings = {

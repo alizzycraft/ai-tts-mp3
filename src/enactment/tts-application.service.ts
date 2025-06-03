@@ -35,7 +35,12 @@ export class TTSApplicationService {
     metadata?: { title?: string; tags?: string[] }
   ): Promise<Result<TTSQuery, string>> {
     try {
-      Logger.info('Creating TTS query', { textLength: text.length, provider: settings.provider });      // Validate settings using domain service
+      Logger.info('Creating TTS query', { textLength: text.length, provider: settings.provider });
+      
+      // Create sanitized settings without API key for storage
+      const { apiKey, ...safeSettings } = settings;
+      
+      // Validate settings using domain service
       this.domainService.validateSettings(settings);
       
       // Create value objects
@@ -46,7 +51,7 @@ export class TTSApplicationService {
       const canProcess = await this.domainService.canProcessQuery({
         id: queryId,
         text: queryText,
-        settings,
+        settings: safeSettings, // Use sanitized settings
         createdAt: new Date(),
         metadata
       });

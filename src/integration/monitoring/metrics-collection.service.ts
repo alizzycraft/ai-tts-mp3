@@ -1,8 +1,9 @@
 // Metrics collection service focused on application performance metrics
-import { Injectable, Inject, PLATFORM_ID, signal, computed, effect } from '@angular/core';
+import { Injectable, Inject, PLATFORM_ID, signal, computed } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { LoggingService, LogLevel } from '../logging.service';
 import { ModelProvider } from '../../domain/tts.entity';
+import { FEATURE_FLAGS } from '../../domain/feature-flags';
 
 export interface ApplicationMetrics {
   requests: {
@@ -140,20 +141,10 @@ export class MetricsCollectionService {
     private logging: LoggingService
   ) {
     this.isBrowser = isPlatformBrowser(platformId);
-
-    if (this.isBrowser) {
-      // Effect to log performance metrics periodically
-      effect(() => {
-        const metrics = this.applicationMetrics();
-        if (metrics.requests.total > 0 && metrics.requests.total % 10 === 0) {
-          this.logging.debug(`Performance summary: ${metrics.requests.total} requests, ${metrics.requests.failed} failed`);
-        }
-      });
-    }
   }
 
   recordRequest(operation: string, duration: number, success: boolean, provider?: ModelProvider, metadata?: Record<string, unknown>): void {
-    if (!this.isBrowser) return;
+    if (!this.isBrowser || !FEATURE_FLAGS.METRICS_COLLECTION) return;
 
     const metric: PerformanceMetric = {
       operation,
@@ -167,9 +158,17 @@ export class MetricsCollectionService {
     // Update the signal by adding new metric and trimming if needed
     this.requestMetrics.update(metrics => {
       const updated = [...metrics, metric];
-      return updated.length > this.MAX_METRICS 
+      const trimmed = updated.length > this.MAX_METRICS 
         ? updated.slice(-this.MAX_METRICS)
         : updated;
+
+      // Log performance summary for every 10th request
+      if (trimmed.length % 10 === 0) {
+        const currentMetrics = this.applicationMetrics();
+        this.logging.debug(`Performance summary: ${currentMetrics.requests.total} requests, ${currentMetrics.requests.failed} failed`);
+      }
+
+      return trimmed;
     });
 
     // Update provider-specific metrics
@@ -181,8 +180,9 @@ export class MetricsCollectionService {
   }
 
   updateStorageMetrics(used: number, available: number): void {
-    this.storageMetrics.set({ used, available });
+    if (!FEATURE_FLAGS.METRICS_COLLECTION) return;
     
+    this.storageMetrics.set({ used, available });
     this.logging.debug('Storage metrics updated');
   }
 

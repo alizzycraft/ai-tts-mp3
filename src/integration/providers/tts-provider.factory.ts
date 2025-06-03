@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 import { ModelProvider, TTSSettings, TTSResult, QueryId } from '../../domain/tts.entity';
 import { Result } from '../../common/result';
 import { LoggingService } from '../logging.service';
-import { MonitoringService } from '../monitoring.service';
+import { ProviderMonitoringService } from '../monitoring/provider-monitoring.service';
 
 // Provider implementations
 import { ElevenLabsTTSService } from './elevenlabs-tts.service';
@@ -46,18 +46,25 @@ export interface GoogleSettings extends TTSSettings {
   providedIn: 'root'
 })
 export class TTSProviderFactory {
-  private providers = new Map<ModelProvider, TTSProvider>();
-  private healthStatus = new Map<ModelProvider, boolean>();  constructor(
+  private readonly providers = new Map<ModelProvider, TTSProvider>();
+
+  constructor(
     private logging: LoggingService,
-    private monitoring: MonitoringService,
+    private providerMonitoring: ProviderMonitoringService,
     private elevenLabsService: ElevenLabsTTSService,
     private azureService: AzureTTSService,
     private googleService: GoogleTTSService,
     private awsPollyService: AWSPollyTTSService,
     private openaiService: OpenAITTSProviderService
   ) {
-    this.initializeProviders();
-    this.logging.info('TTSProviderFactory initialized with all providers', 'Factory');
+    // Providers will be available through DI, just create the map for lookup
+    this.providers.set(ModelProvider.OPENAI, this.openaiService);
+    this.providers.set(ModelProvider.ELEVENLABS, this.elevenLabsService);
+    this.providers.set(ModelProvider.AZURE, this.azureService);
+    this.providers.set(ModelProvider.GOOGLE, this.googleService);
+    this.providers.set(ModelProvider.AWS, this.awsPollyService);
+    
+    this.logging.debug(`TTS provider factory ready with providers: ${Array.from(this.providers.keys()).join(', ')}`, 'Factory');
   }
 
   /**
@@ -98,7 +105,8 @@ export class TTSProviderFactory {
     for (const [provider, instance] of this.providers.entries()) {
       try {
         const capabilities = instance.getCapabilities();
-        const isHealthy = this.healthStatus.get(provider) ?? false;
+        const healthResult = this.providerMonitoring.getProviderHealth(provider);
+        const isHealthy = healthResult.isSuccess() ? healthResult.getValue() : false;
         
         providersInfo.push({
           provider,
@@ -136,10 +144,10 @@ export class TTSProviderFactory {
       const validationResult = await providerInstance.validateConfiguration(settings);
       
       if (validationResult.isSuccess()) {
-        this.healthStatus.set(provider, true);
+        this.providerMonitoring.recordHealthCheck(provider, true);
         this.logging.info(`Configuration validated successfully for ${provider}`, 'Factory');
       } else {
-        this.healthStatus.set(provider, false);
+        this.providerMonitoring.recordHealthCheck(provider, false);
         this.logging.warn(`Configuration validation failed for ${provider}: ${validationResult.getError()}`, 'Factory');
       }
 
@@ -148,7 +156,7 @@ export class TTSProviderFactory {
     } catch (error) {
       const errorMessage = `Configuration validation error for ${provider}: ${error instanceof Error ? error.message : 'Unknown error'}`;
       this.logging.error(errorMessage, error as Error, 'Factory');
-      this.healthStatus.set(provider, false);
+      this.providerMonitoring.recordHealthCheck(provider, false);
       return Result.failure(errorMessage);
     }
   }
@@ -160,27 +168,26 @@ export class TTSProviderFactory {
     this.logging.info('Starting health checks for all providers', 'Factory');
     const healthResults = new Map<ModelProvider, boolean>();
 
-    for (const provider of this.providers.keys()) {
+    for (const [provider, instance] of this.providers.entries()) {
       try {
         // For now, we'll consider a provider healthy if it can return capabilities
-        const providerInstance = this.providers.get(provider)!;
-        const capabilities = providerInstance.getCapabilities();
+        const capabilities = instance.getCapabilities();
+        const isHealthy = !!capabilities;
         
-        if (capabilities) {
-          healthResults.set(provider, true);
-          this.monitoring.recordHealthCheck(provider, true);
-        } else {
-          healthResults.set(provider, false);
-          this.monitoring.recordHealthCheck(provider, false);
-        }
+        healthResults.set(provider, isHealthy);
+        this.providerMonitoring.recordHealthCheck(provider, isHealthy);
 
       } catch (error) {
         healthResults.set(provider, false);
-        this.monitoring.recordHealthCheck(provider, false);
+        this.providerMonitoring.recordHealthCheck(provider, false);
         this.logging.error(`Health check failed for ${provider}`, error as Error, 'Factory');
       }
-    }    this.healthStatus = healthResults;
-    this.logging.info(`Health checks completed. Healthy providers: ${Array.from(healthResults.entries()).filter(([, healthy]) => healthy).map(([provider]) => provider).join(', ')}`, 'Factory');
+    }
+
+    this.logging.info(`Health checks completed. Healthy providers: ${Array.from(healthResults.entries())
+      .filter(([, healthy]) => healthy)
+      .map(([provider]) => provider)
+      .join(', ')}`, 'Factory');
     
     return healthResults;
   }
@@ -189,7 +196,8 @@ export class TTSProviderFactory {
    * Get the health status of a specific provider
    */
   getProviderHealth(provider: ModelProvider): boolean {
-    return this.healthStatus.get(provider) ?? false;
+    const healthResult = this.providerMonitoring.getProviderHealth(provider);
+    return healthResult.isSuccess() ? healthResult.getValue() : false;
   }
 
   /**
@@ -219,24 +227,22 @@ export class TTSProviderFactory {
       return Result.failure(providerResult.getError());
     }
 
-    const providerInstance = providerResult.getValue();
+    const instance = providerResult.getValue();
+    if (!instance.clearCache) {
+      return Result.failure(`Provider ${provider} does not support cache clearing`);
+    }
 
     try {
-      if (providerInstance.clearCache) {
-        providerInstance.clearCache();
-        this.logging.info(`Cache cleared for ${provider}`, 'Factory');
-        return Result.success(true);
-      } else {
-        const message = `Provider ${provider} does not support cache clearing`;
-        this.logging.warn(message, 'Factory');
-        return Result.failure(message);
-      }
+      instance.clearCache();
+      this.logging.info(`Cache cleared for ${provider}`, 'Factory');
+      return Result.success(true);
     } catch (error) {
       const errorMessage = `Failed to clear cache for ${provider}: ${error instanceof Error ? error.message : 'Unknown error'}`;
       this.logging.error(errorMessage, error as Error, 'Factory');
       return Result.failure(errorMessage);
     }
   }
+
   /**
    * Get provider-specific settings interface information
    */
@@ -292,28 +298,5 @@ export class TTSProviderFactory {
         return baseInfo;
     }
   }
-
-  /**
-   * Initialize all provider instances
-   */
-  private initializeProviders(): void {    try {
-      // Initialize all provider instances with dependency injection
-      this.providers.set(ModelProvider.OPENAI, this.openaiService);
-      this.providers.set(ModelProvider.ELEVENLABS, this.elevenLabsService);
-      this.providers.set(ModelProvider.AZURE, this.azureService);
-      this.providers.set(ModelProvider.GOOGLE, this.googleService);
-      this.providers.set(ModelProvider.AWS, this.awsPollyService);
-
-      // Initialize health status
-      for (const provider of this.providers.keys()) {
-        this.healthStatus.set(provider, false); // Will be updated during first health check
-      }
-
-      this.logging.info(`Initialized ${this.providers.size} TTS providers: ${Array.from(this.providers.keys()).join(', ')}`, 'Factory');
-
-    } catch (error) {
-      this.logging.error('Failed to initialize providers', error as Error, 'Factory');
-      throw error;
-    }
-  }
+  // Provider initialization is now handled by Angular DI
 }

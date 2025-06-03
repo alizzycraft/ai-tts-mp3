@@ -60,4 +60,10 @@ export class ApiKey extends NonEmptyText {
     
     return null; // Unknown format
   }
+
+  // Override toJSON to prevent accidental serialization of API keys
+  toJSON(): null {
+    // Return null when serialized to prevent API keys from being stored
+    return null;
+  }
 }

@@ -1,20 +1,43 @@
 // Integration layer monitoring service - now using focused monitoring services
 import { Injectable } from '@angular/core';
-import { MonitoringService as CoreMonitoringService } from './monitoring/monitoring.service';
+import { MonitoringService as CoreMonitoring } from './monitoring/monitoring.service';
+import { ProviderMonitoringService } from './monitoring/provider-monitoring.service';
 import { ModelProvider } from '../domain/tts.entity';
+import { ProviderHealthMetrics } from './monitoring/provider-monitoring.service';
 
 // Re-export types for backward compatibility
 export type { HealthStatus, HealthCheck } from './monitoring/health-check.service';
 export type { ApplicationMetrics } from './monitoring/metrics-collection.service';
 export type { Alert } from './monitoring/alert.service';
+export type { ProviderHealthMetrics };
 
 @Injectable({
   providedIn: 'root'
 })
 export class MonitoringService {
-  constructor(private coreMonitoring: CoreMonitoringService) {}
+  constructor(
+    private coreMonitoring: CoreMonitoring,
+    private providerMonitoring: ProviderMonitoringService
+  ) {}
 
-  // Delegate all methods to the core monitoring service
+  // Provider-specific monitoring methods
+  recordHealthCheck(provider: ModelProvider, isHealthy: boolean): void {
+    this.providerMonitoring.recordHealthCheck(provider, isHealthy);
+  }
+
+  getProviderHealth(provider: ModelProvider) {
+    return this.providerMonitoring.getProviderHealth(provider);
+  }
+
+  updateProviderMetrics(provider: ModelProvider, metrics: ProviderHealthMetrics): void {
+    this.providerMonitoring.updateProviderMetrics(provider, metrics);
+  }
+
+  getAllProviderMetrics(): Map<ModelProvider, ProviderHealthMetrics> {
+    return this.providerMonitoring.getAllProviderMetrics();
+  }
+
+  // Core monitoring methods
   async getHealthStatus() {
     return this.coreMonitoring.getHealthStatus();
   }
@@ -35,6 +58,7 @@ export class MonitoringService {
     return this.coreMonitoring.getMetrics();
   }
 
+  // Alert management
   getActiveAlerts() {
     return this.coreMonitoring.getActiveAlerts();
   }
@@ -55,31 +79,23 @@ export class MonitoringService {
     return this.coreMonitoring.checkAlerts();
   }
 
+  // System operations
   async runMonitoringCycle() {
     return this.coreMonitoring.runMonitoringCycle();
   }
 
   clearAllData() {
+    this.providerMonitoring.clearAllData();
     this.coreMonitoring.clearAllData();
   }
 
   getMonitoringSummary() {
-    return this.coreMonitoring.getMonitoringSummary();
-  }
-
-  // Legacy methods for backward compatibility
-  recordHealthCheck(provider: ModelProvider, isHealthy: boolean): void {
-    this.recordRequest(`healthCheck_${provider}`, 0, isHealthy, provider, { healthCheck: true });
-  }
-
-  exportDiagnostics(): string {
-    const summary = this.getMonitoringSummary();
-    return JSON.stringify({
-      timestamp: new Date().toISOString(),
-      health: summary.health,
-      metrics: summary.metrics,
-      alerts: summary.activeAlerts,
-      summary: summary.summary
-    }, null, 2);
+    const coreData = this.coreMonitoring.getMonitoringSummary();
+    const providerData = this.providerMonitoring.getAllProviderMetrics();
+    
+    return {
+      ...coreData,
+      providers: Object.fromEntries(providerData)
+    };
   }
 }

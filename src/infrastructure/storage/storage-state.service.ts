@@ -21,6 +21,7 @@ export interface FolderReconnectionPrompt {
 export class StorageStateService {
   private readonly FOLDER_STATE_KEY = 'tts-folder-state';
   private readonly STORAGE_STATE_KEY = 'tts-storage-state';
+  private initialized = false;
 
   private fileSystemStateSubject = new BehaviorSubject<FileSystemStorageState>({
     isSupported: false,
@@ -33,19 +34,66 @@ export class StorageStateService {
 
   constructor(
     @Inject(PLATFORM_ID) private platformId: object
-  ) {
-  }
+  ) {}
 
   /** true only when running in a browser (not during SSR) */
   private get isBrowser(): boolean {
     return isPlatformBrowser(this.platformId);
   }
 
-  // Observables
+  // Initialize storage state with support detection
+  initializeState(isSupported: boolean): void {
+    if (this.initialized) {
+      console.debug('[StorageState] Already initialized, skipping.');
+      return;
+    }
+
+    this.initialized = true;
+    console.debug('[StorageState] Initializing storage state, filesystem support:', isSupported);
+
+    if (this.isBrowser) {
+      this.fileSystemStateSubject.next({
+        isSupported,
+        isEnabled: false,
+        directoryHandle: null,
+        selectedPath: null
+      });
+    }
+  }
+
+  // File system state observable
   get fileSystemState$(): Observable<FileSystemStorageState> {
     return this.fileSystemStateSubject.asObservable();
   }
 
+  // Get current file system state
+  getFileSystemState(): FileSystemStorageState {
+    return this.fileSystemStateSubject.value;
+  }
+
+  // Update file system state
+  updateFileSystemState(updates: Partial<FileSystemStorageState>): void {
+    if (!this.isBrowser) return;
+
+    const current = this.fileSystemStateSubject.value;
+    const updated = { ...current, ...updates };
+    this.fileSystemStateSubject.next(updated);
+    this.saveStorageState();
+  }
+
+  // Set folder reconnection prompt
+  setFolderReconnectionPrompt(prompt: FolderReconnectionPrompt | null): void {
+    console.debug('[StorageState] Setting folder reconnection prompt:', prompt);
+    this.folderReconnectionSubject.next(prompt);
+  }
+
+  // Clear folder reconnection prompt
+  clearFolderReconnectionPrompt(): void {
+    console.debug('[StorageState] Clearing folder reconnection prompt');
+    this.folderReconnectionSubject.next(null);
+  }
+
+  // Observables
   get folderReconnectionPrompt$(): Observable<FolderReconnectionPrompt | null> {
     return this.folderReconnectionSubject.asObservable();
   }
@@ -53,38 +101,6 @@ export class StorageStateService {
   // Current state getters
   getState(): FileSystemStorageState {
     return this.fileSystemStateSubject.value;
-  }
-
-  getFileSystemState(): FileSystemStorageState {
-    return this.fileSystemStateSubject.value;
-  }
-
-  // Initialize storage state with support detection
-  initializeState(isSupported: boolean): void {
-    this.fileSystemStateSubject.next({
-      isSupported,
-      isEnabled: false,
-      directoryHandle: null,
-      selectedPath: null
-    });
-  }
-
-  // Update file system state
-  updateFileSystemState(updates: Partial<FileSystemStorageState>): void {
-    const currentState = this.fileSystemStateSubject.value;
-    const newState = { ...currentState, ...updates };
-    console.log('[StorageState] Updating file system state:', newState);
-    this.fileSystemStateSubject.next(newState);
-  }
-
-  // Set folder reconnection prompt
-  setFolderReconnectionPrompt(prompt: FolderReconnectionPrompt | null): void {
-    this.folderReconnectionSubject.next(prompt);
-  }
-
-  // Clear folder reconnection prompt
-  clearFolderReconnectionPrompt(): void {
-    this.folderReconnectionSubject.next(null);
   }
 
   // Load storage state from localStorage

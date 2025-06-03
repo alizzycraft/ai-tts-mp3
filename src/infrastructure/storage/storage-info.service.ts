@@ -10,6 +10,8 @@ import { FileSystemStorageState } from './storage-state.service';
 })
 export class StorageInfoService {
   private readonly MAX_STORAGE_MB = 20; // Used for localStorage fallback
+  private lastUpdateTime = 0;
+  private readonly UPDATE_THRESHOLD_MS = 100; // Minimum time between updates
 
   private storageInfoSubject = new BehaviorSubject<StorageInfo>({
     used: 0,
@@ -41,8 +43,29 @@ export class StorageInfoService {
     history: HistoryItem[],
     fileSystemState: FileSystemStorageState
   ): void {
+    // Skip update if called too frequently 
+    const now = Date.now();
+    if (now - this.lastUpdateTime < this.UPDATE_THRESHOLD_MS) {
+      return;
+    }
+    this.lastUpdateTime = now;
+
     const storageInfo = this.calculateStorageInfo(history, fileSystemState);
-    this.storageInfoSubject.next(storageInfo);
+    const current = this.storageInfoSubject.value;
+
+    // Only update if there are actual changes
+    if (this.hasStorageInfoChanged(current, storageInfo)) {
+      console.debug('[StorageInfo] Updating storage info:', storageInfo);
+      this.storageInfoSubject.next(storageInfo);
+    }
+  }
+
+  private hasStorageInfoChanged(a: StorageInfo, b: StorageInfo): boolean {
+    return a.used !== b.used ||
+           a.available !== b.available ||
+           a.total !== b.total ||
+           a.usedPercentage !== b.usedPercentage ||
+           a.itemCount !== b.itemCount;
   }
 
   // Calculate storage info based on current state
