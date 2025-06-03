@@ -1,4 +1,4 @@
-import { Component, Input, computed, signal, effect, OnDestroy, inject, output } from '@angular/core';
+import { Component, computed, effect, input, output, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TTSResult } from '../../integration/domain-types';
 import { FormatDatePipe } from '../shared/pipes/format-date.pipe';
@@ -36,9 +36,9 @@ export class AudioPlayerComponent implements OnDestroy {
   public playbackService = inject(PlaybackService);
   private cdr = inject(ChangeDetectorRef);
 
-  // Input signal for the current query information
-  @Input() currentQueryInfo = signal<CurrentQueryInfo | null>(null);
-  @Input() currentResult = signal<TTSResult | null>(null);
+  // Input signals
+  currentQueryInfo = input<CurrentQueryInfo | null>(null);
+  currentResult = input<TTSResult | null>(null);
 
   // Output events
   clearResult = output<void>();
@@ -127,11 +127,10 @@ export class AudioPlayerComponent implements OnDestroy {
     const result = this.currentResult(); // Get the full currentResult object
     const duration = result?.duration;
     return duration; // The formatting pipe will handle display
-  });
-
-  // Effect to react to changes in currentQueryInfo
+  });  // Effect to react to changes in currentQueryInfo
   private queryInfoEffect = effect(() => {
-    const info = this.currentQueryInfo();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _info = this.currentQueryInfo();
     // Effect runs to track changes in currentQueryInfo
     // Playback is handled by user interaction through the play button
   });

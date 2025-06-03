@@ -6,7 +6,8 @@ import { PlaybackService as InfraPlaybackService } from '../infrastructure/audio
 @Injectable({
   providedIn: 'root'
 })
-export class PlaybackService implements OnDestroy {  // Expose readonly signals
+export class PlaybackService implements OnDestroy {
+  // Expose readonly signals
   readonly playingItemId;
   readonly isPlaying;
   readonly currentTime;
@@ -21,13 +22,16 @@ export class PlaybackService implements OnDestroy {  // Expose readonly signals
     this.hasEnded = this.playbackService.hasEnded;
   }
 
-  // Proxy all methods
+  // Proxy all methods to infrastructure service
   loadAudio(result: TTSResult, itemId?: string): Promise<void> {
     return this.playbackService.loadAudio(result, itemId);
   }
 
   playResult(result: TTSResult, itemId?: string): Promise<void> {
     return this.playbackService.playResult(result, itemId);
+  }
+  play(): void {
+    this.playbackService.play();
   }
 
   pause(): void {

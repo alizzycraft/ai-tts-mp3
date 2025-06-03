@@ -6,7 +6,7 @@ import {
 } from '../domain/tts.repository';
 import { TTSRepositoryFactory } from '../infrastructure/repositories/repository.factory';
 import { TTSSettings, TTSResult, ModelProvider, QueryId } from '../domain/tts.entity';
-import { ProviderConfigurationService } from './provider-configuration.service';
+import { ProviderConfigurationService } from './settings/provider-configuration.service';
 import { ErrorHandlingService, ErrorContext } from './error-handling.service';
 import { LoggingService } from './logging.service';
 import { MonitoringService } from './monitoring.service';

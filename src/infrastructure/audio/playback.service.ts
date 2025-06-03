@@ -1,45 +1,50 @@
-import { Injectable, signal, Inject, PLATFORM_ID, OnDestroy } from '@angular/core';
+import { Injectable, OnDestroy, Inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { TTSResult } from '../../domain/tts.entity'; // Corrected path to domain layer
-import { HistoryItem } from '../history-storage.service'; // Import HistoryItem from infrastructure
+import { TTSResult } from '../../domain/tts.entity';
+import { HistoryItem } from '../storage/storage-types';
+import { AudioStateManager } from './audio-state-manager.service';
+import { Signal } from '@angular/core';
 
 @Injectable({
   providedIn: 'root'
 })
 export class PlaybackService implements OnDestroy {
-  private audio: HTMLAudioElement | undefined;
+  private audio: HTMLAudioElement | null = null;
   private currentAudioUrl: string | null = null;
-  private currentAudioData: ArrayBuffer | null = null;
+  private currentAudioData: Uint8Array | null = null;
 
-  // State signals
-  private _playingItemId = signal<string | null>(null);
-  private _isPlaying = signal<boolean>(false);
-  private _currentTime = signal<number>(0);
-  private _totalDuration = signal<number>(0);
-  private _hasEnded = signal<boolean>(false);
+  // Public readonly signals
+  readonly playingItemId: Signal<string | null>;
+  readonly isPlaying: Signal<boolean>;
+  readonly currentTime: Signal<number>;
+  readonly totalDuration: Signal<number>;
+  readonly hasEnded: Signal<boolean>;
 
-  // Public signals (computed for read-only access)
-  readonly playingItemId = this._playingItemId.asReadonly();
-  readonly isPlaying = this._isPlaying.asReadonly();
-  readonly currentTime = this._currentTime.asReadonly();
-  readonly totalDuration = this._totalDuration.asReadonly();
-  readonly hasEnded = this._hasEnded.asReadonly();
+  constructor(
+    @Inject(PLATFORM_ID) private platformId: object,
+    private stateManager: AudioStateManager
+  ) {
+    // Initialize signals
+    this.playingItemId = this.stateManager.playingItemId;
+    this.isPlaying = this.stateManager.isPlaying;
+    this.currentTime = this.stateManager.currentTime;
+    this.totalDuration = this.stateManager.totalDuration;
+    this.hasEnded = this.stateManager.hasEnded;
 
-  constructor(@Inject(PLATFORM_ID) private platformId: object) {
     if (isPlatformBrowser(this.platformId)) {
       this.audio = new Audio();
 
       // Listen for time updates to update progress
       this.audio.ontimeupdate = () => {
         if (this.audio) {
-          this._currentTime.set(this.audio.currentTime);
+          this.stateManager.setCurrentTime(this.audio.currentTime);
         }
       };
       
       // Listen for loadedmetadata to get duration
       this.audio.onloadedmetadata = () => {
         if (this.audio) {
-          this._totalDuration.set(this.audio.duration);
+          this.stateManager.setTotalDuration(this.audio.duration);
         }
       };
       
@@ -47,17 +52,18 @@ export class PlaybackService implements OnDestroy {
       this.audio.onended = () => {
         if (this.audio) {
           this.audio.pause();
-          this._isPlaying.set(false);
-          this._hasEnded.set(true);
+          this.stateManager.setIsPlaying(false);
+          this.stateManager.setHasEnded(true);
         }
       };
 
       // Update playing state
       this.audio.onplay = () => {
-        this._isPlaying.set(true);
+        this.stateManager.setIsPlaying(true);
       };
+      
       this.audio.onpause = () => {
-        this._isPlaying.set(false);
+        this.stateManager.setIsPlaying(false);
       };
     }
   }
@@ -101,8 +107,8 @@ export class PlaybackService implements OnDestroy {
       this.audio.src = this.currentAudioUrl;
 
       // Reset states
-      this._hasEnded.set(false);
-      this._playingItemId.set(itemId || null);
+      this.stateManager.setHasEnded(false);
+      this.stateManager.setPlayingItemId(itemId || null);
 
       // Wait for audio to be fully loaded and metadata available
       const onReady = () => {
@@ -115,10 +121,6 @@ export class PlaybackService implements OnDestroy {
         resolve();
       };
 
-      // Add listeners for successful loading states
-      this.audio.addEventListener('canplaythrough', onReady);
-      this.audio.addEventListener('loadedmetadata', onReady);
-
       const onError = () => {
         if (!this.audio) { // Should not happen
             reject(new Error('Audio element not available during error handling'));
@@ -127,16 +129,19 @@ export class PlaybackService implements OnDestroy {
         this.audio.removeEventListener('canplaythrough', onReady);
         this.audio.removeEventListener('loadedmetadata', onReady);
         this.audio.removeEventListener('error', onError);
-
+        
         if (this.currentAudioUrl) {
           URL.revokeObjectURL(this.currentAudioUrl);
           this.currentAudioUrl = null;
         }
         this.currentAudioData = null;
-        this._playingItemId.set(null);
-        this._isPlaying.set(false);
+        this.stateManager.setPlayingItemId(null);
+        this.stateManager.setIsPlaying(false);
         reject(new Error('Failed to load audio'));
       };
+
+      this.audio.addEventListener('canplaythrough', onReady);
+      this.audio.addEventListener('loadedmetadata', onReady);
       this.audio.addEventListener('error', onError);
     });
   }
@@ -172,15 +177,15 @@ export class PlaybackService implements OnDestroy {
   stop(cleanup = true): void {
     if (isPlatformBrowser(this.platformId) && this.audio) {
         this.audio.pause();
-        this._isPlaying.set(false);
+        this.stateManager.setIsPlaying(false);
 
         if (cleanup) {
           // Reset everything and clean up resources
           this.audio.currentTime = 0;
-          this._currentTime.set(0);
-          this._totalDuration.set(0);
-          this._hasEnded.set(false);
-          this._playingItemId.set(null);
+          this.stateManager.setCurrentTime(0);
+          this.stateManager.setTotalDuration(0);
+          this.stateManager.setHasEnded(false);
+          this.stateManager.setPlayingItemId(null);
           
           if (this.currentAudioUrl) {
             URL.revokeObjectURL(this.currentAudioUrl);
@@ -214,7 +219,7 @@ export class PlaybackService implements OnDestroy {
     }
 
     // If we're currently playing, always pause first
-    if (this._isPlaying()) {
+    if (this.isPlaying()) {
       this.pause();
       return;
     }
@@ -228,8 +233,8 @@ export class PlaybackService implements OnDestroy {
     }
 
     // If the item ID is different from the currently playing item ID, load the new audio
-    if (this._playingItemId() !== currentItemId) {
-      // loadAudio handles creating Blob URL, setting src, and setting _playingItemId
+    if (this.playingItemId() !== currentItemId) {
+      // loadAudio handles creating Blob URL, setting src, and setting playingItemId
       await this.loadAudio(result, currentItemId); 
     }
 
@@ -241,10 +246,10 @@ export class PlaybackService implements OnDestroy {
           if (!this.audio) { reject('Audio element not available during readyState wait'); return; }
           const onReady = () => {
             this.audio?.removeEventListener('canplaythrough', onReady);
-            this.audio?.removeEventListener('loadedmetadata', onReady); // Also listen for this, though canplaythrough is usually sufficient
+            this.audio?.removeEventListener('loadedmetadata', onReady);
             resolve();
           };
-          const onError = (e: any) => { // Use any for error event
+          const onError = (e: Event) => { // Use Event type for error event
                console.error('togglePlayPause: Error waiting for audio readyState', e);
                this.audio?.removeEventListener('canplaythrough', onReady);
                this.audio?.removeEventListener('loadedmetadata', onReady);
@@ -260,12 +265,12 @@ export class PlaybackService implements OnDestroy {
       if (this.audio) {
         await this.audio.play();
         // Ensure playingItemId is set after successful play
-        this._playingItemId.set(currentItemId || null);
+        this.stateManager.setPlayingItemId(currentItemId || null);
       }
 
     } catch (error) {
       console.error('Error playing audio:', error);
-      this._isPlaying.set(false);
+      this.stateManager.setIsPlaying(false);
     }
   }
 
@@ -280,9 +285,11 @@ export class PlaybackService implements OnDestroy {
       }
 
       const onCanPlay = () => {
-        this.audio!.removeEventListener('canplay', onCanPlay);
-        this.audio!.currentTime = timeInSeconds;
-        resolve();
+        if (this.audio) {
+          this.audio.removeEventListener('canplay', onCanPlay);
+          this.audio.currentTime = timeInSeconds;
+          resolve();
+        }
       };
 
       if (this.audio.readyState >= 3) { // HAVE_FUTURE_DATA
@@ -297,7 +304,8 @@ export class PlaybackService implements OnDestroy {
   /**
    * Seeks to a specific percentage of the audio duration.
    * @param percentage Number between 0 and 100
-   */  async seekToPercentage(percentage: number, shouldPlay?: boolean): Promise<void> {
+   */  
+  async seekToPercentage(percentage: number, shouldPlay?: boolean): Promise<void> {
     if (!isPlatformBrowser(this.platformId) || !this.audio || this.audio.readyState < 1) { // Check readyState
       console.warn('Seek failed: Audio not ready');
       return;
@@ -307,7 +315,7 @@ export class PlaybackService implements OnDestroy {
     const clampedPercentage = Math.min(Math.max(0, percentage), 100);
     
     // Remember playing state
-    const wasPlaying = this._isPlaying();
+    const wasPlaying = this.isPlaying();
     
     // Pause while seeking to avoid audio glitches
     if (wasPlaying) {
@@ -336,7 +344,7 @@ export class PlaybackService implements OnDestroy {
         });
       }
     };
-
+    
     await waitForLoad();
     
     // Calculate target time and clamp it to valid range
@@ -345,10 +353,10 @@ export class PlaybackService implements OnDestroy {
     
     // Apply the seek
     this.audio.currentTime = targetTime;
-    this._currentTime.set(targetTime);
+    this.stateManager.setCurrentTime(targetTime);
     
     // Update state and handle playback
-    this._hasEnded.set(false);
+    this.stateManager.setHasEnded(false);
     
     // Resume or start playback if requested or if it was already playing
     if (shouldPlay || wasPlaying) {
@@ -366,6 +374,7 @@ export class PlaybackService implements OnDestroy {
   play(): void {
     if (isPlatformBrowser(this.platformId) && this.audio) {
       this.audio.play().then(() => {
+        // Audio playback started successfully
       }).catch(error => {
         console.error('[PlaybackService] this.audio.play() failed:', error);
       });

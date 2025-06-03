@@ -1,5 +1,5 @@
 // ElevenLabs TTS provider implementation
-import { Injectable } from '@angular/core';
+import { Injectable, signal, computed, effect } from '@angular/core';
 import { LoggingService } from '../logging.service';
 import { MonitoringService } from '../monitoring.service';
 import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus } from '../../domain/tts.entity';
@@ -64,17 +64,63 @@ export interface ElevenLabsModel {
 })
 export class ElevenLabsTTSService {
   private readonly baseUrl = 'https://api.elevenlabs.io/v1';
-  private cachedVoices: ElevenLabsVoice[] = [];
-  private cachedModels: ElevenLabsModel[] = [];
-  private voicesCacheExpiry: Date | null = null;
-  private modelsCacheExpiry: Date | null = null;
   private readonly cacheExpiryTime = 5 * 60 * 1000; // 5 minutes
+
+  // Reactive state with signals
+  private cachedVoices = signal<ElevenLabsVoice[]>([]);
+  private cachedModels = signal<ElevenLabsModel[]>([]);
+  private voicesCacheExpiry = signal<Date | null>(null);
+  private modelsCacheExpiry = signal<Date | null>(null);
+  private isValidated = signal<boolean>(false);
+  private synthesisCount = signal<number>(0);
+  private errorCount = signal<number>(0);
+
+  // Computed reactive properties
+  readonly voicesCount = computed(() => this.cachedVoices().length);
+  readonly modelsCount = computed(() => this.cachedModels().length);
+  readonly successRate = computed(() => {
+    const total = this.synthesisCount() + this.errorCount();
+    return total > 0 ? (this.synthesisCount() / total) * 100 : 0;
+  });
+  readonly providerStatus = computed(() => {
+    if (!this.isValidated()) return 'not-validated';
+    if (this.errorCount() > this.synthesisCount()) return 'degraded';
+    return 'healthy';
+  });
 
   constructor(
     private logging: LoggingService,
     private monitoring: MonitoringService
   ) {
     this.logging.info('ElevenLabsTTSService initialized', 'ElevenLabs');
+
+    // Effects for reactive behaviors
+    effect(() => {
+      // Auto-cleanup expired caches
+      const now = new Date();
+      if (this.voicesCacheExpiry() && now > this.voicesCacheExpiry()!) {
+        this.cachedVoices.set([]);
+        this.voicesCacheExpiry.set(null);
+        this.logging.info('ElevenLabs voices cache expired and cleared', 'ElevenLabs');
+      }
+      if (this.modelsCacheExpiry() && now > this.modelsCacheExpiry()!) {
+        this.cachedModels.set([]);
+        this.modelsCacheExpiry.set(null);
+        this.logging.info('ElevenLabs models cache expired and cleared', 'ElevenLabs');
+      }
+    });
+
+    effect(() => {
+      // Monitor provider health
+      const status = this.providerStatus();
+      if (status === 'degraded') {
+        this.logging.warn(`ElevenLabs provider status: ${status}`, 'ElevenLabs', {
+          synthesisCount: this.synthesisCount(),
+          errorCount: this.errorCount(),
+          successRate: this.successRate()
+        });
+      }
+    });
   }
 
   // Core TTS functionality
@@ -102,7 +148,8 @@ export class ElevenLabsTTSService {
           const audioData = await this.makeTextToSpeechRequest(text, settings);
           const processingTime = Date.now() - startTime;
 
-          this.monitoring.recordRequest(ModelProvider.ELEVENLABS, true, processingTime);          const result: TTSResult = {
+          this.monitoring.recordRequest('elevenlabs_synthesis', processingTime, true, ModelProvider.ELEVENLABS);
+          this.synthesisCount.update(count => count + 1);          const result: TTSResult = {
             queryId,
             status: TTSResultStatus.COMPLETED,
             createdAt: new Date(),
@@ -123,7 +170,8 @@ export class ElevenLabsTTSService {
 
         } catch (error) {
           const processingTime = Date.now() - startTime;
-          this.monitoring.recordRequest(ModelProvider.ELEVENLABS, false, processingTime);
+          this.monitoring.recordRequest('elevenlabs_synthesis', processingTime, false, ModelProvider.ELEVENLABS);
+          this.errorCount.update(count => count + 1);
 
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
           this.logging.error('ElevenLabs synthesis failed', error as Error, 'ElevenLabs');          const result: TTSResult = {
@@ -145,11 +193,11 @@ export class ElevenLabsTTSService {
       'ElevenLabs'
     );
   }
-
   // Voice management
-  async getAvailableVoices(apiKey: string): Promise<Result<ElevenLabsVoice[], string>> {    // Check if cache is valid
-    if (this.cachedVoices.length > 0 && this.voicesCacheExpiry && new Date() < this.voicesCacheExpiry) {
-      return Result.success(this.cachedVoices);
+  async getAvailableVoices(apiKey: string): Promise<Result<ElevenLabsVoice[], string>> {
+    // Check if cache is valid
+    if (this.cachedVoices().length > 0 && this.voicesCacheExpiry() && new Date() < this.voicesCacheExpiry()!) {
+      return Result.success(this.cachedVoices());
     }
 
     return this.logging.trackPerformance(
@@ -164,14 +212,12 @@ export class ElevenLabsTTSService {
 
           if (!response.ok) {
             throw new Error(`Failed to fetch voices: ${response.status} ${response.statusText}`);
-          }
+          }          const data = await response.json();
+          this.cachedVoices.set(data.voices || []);
+          this.voicesCacheExpiry.set(new Date(Date.now() + this.cacheExpiryTime));
 
-          const data = await response.json();
-          this.cachedVoices = data.voices || [];
-          this.voicesCacheExpiry = new Date(Date.now() + this.cacheExpiryTime);
-
-          this.logging.info(`Retrieved ${this.cachedVoices.length} ElevenLabs voices`, 'ElevenLabs');
-          return Result.success(this.cachedVoices);
+          this.logging.info(`Retrieved ${this.cachedVoices().length} ElevenLabs voices`, 'ElevenLabs');
+          return Result.success(this.cachedVoices());
 
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to fetch voices';
@@ -182,11 +228,11 @@ export class ElevenLabsTTSService {
       'ElevenLabs'
     );
   }
-
   // Model management
-  async getAvailableModels(apiKey: string): Promise<Result<ElevenLabsModel[], string>> {    // Check if cache is valid
-    if (this.cachedModels.length > 0 && this.modelsCacheExpiry && new Date() < this.modelsCacheExpiry) {
-      return Result.success(this.cachedModels);
+  async getAvailableModels(apiKey: string): Promise<Result<ElevenLabsModel[], string>> {
+    // Check if cache is valid
+    if (this.cachedModels().length > 0 && this.modelsCacheExpiry() && new Date() < this.modelsCacheExpiry()!) {
+      return Result.success(this.cachedModels());
     }
 
     return this.logging.trackPerformance(
@@ -201,14 +247,12 @@ export class ElevenLabsTTSService {
 
           if (!response.ok) {
             throw new Error(`Failed to fetch models: ${response.status} ${response.statusText}`);
-          }
+          }          const data = await response.json();
+          this.cachedModels.set(data || []);
+          this.modelsCacheExpiry.set(new Date(Date.now() + this.cacheExpiryTime));
 
-          const data = await response.json();
-          this.cachedModels = data || [];
-          this.modelsCacheExpiry = new Date(Date.now() + this.cacheExpiryTime);
-
-          this.logging.info(`Retrieved ${this.cachedModels.length} ElevenLabs models`, 'ElevenLabs');
-          return Result.success(this.cachedModels);
+          this.logging.info(`Retrieved ${this.cachedModels().length} ElevenLabs models`, 'ElevenLabs');
+          return Result.success(this.cachedModels());
 
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to fetch models';
@@ -265,9 +309,8 @@ export class ElevenLabsTTSService {
 
       if (!response.ok) {
         return Result.failure(`Invalid API key or network error: ${response.status}`);
-      }
-
-      this.logging.info('ElevenLabs configuration validated successfully', 'ElevenLabs');
+      }      this.logging.info('ElevenLabs configuration validated successfully', 'ElevenLabs');
+      this.isValidated.set(true);
       return Result.success(true);
 
     } catch (error) {
@@ -287,13 +330,12 @@ export class ElevenLabsTTSService {
       defaultVoice: 'Rachel', // Popular ElevenLabs voice
       requiresApiKey: true
     };
-  }
-  // Clear caches
+  }  // Clear caches
   clearCache(): void {
-    this.cachedVoices = [];
-    this.cachedModels = [];
-    this.voicesCacheExpiry = null;
-    this.modelsCacheExpiry = null;
+    this.cachedVoices.set([]);
+    this.cachedModels.set([]);
+    this.voicesCacheExpiry.set(null);
+    this.modelsCacheExpiry.set(null);
     this.logging.info('ElevenLabs cache cleared', 'ElevenLabs');
   }
 

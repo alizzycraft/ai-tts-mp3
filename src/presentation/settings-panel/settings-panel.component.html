@@ -18,17 +18,19 @@
       </h3>
     </div>
   </div>
+
   <!-- Settings Content -->
-  <div class="settings-content">    <!-- Voice Provider Selection -->
+  <div class="settings-content">
+    <!-- Voice Provider Selection -->
     <div class="settings-section">
       <label class="setting-label" for="provider-select">Voice Provider</label>
       <select 
         id="provider-select"
-        [ngModel]="settingsService.selectedProvider()" 
-        (ngModelChange)="settingsService.updateProvider($event)" 
-        (change)="onProviderChange()" 
+        [ngModel]="selectedProvider()"
+        (ngModelChange)="updateProvider($event)"
+        (change)="onProviderChange($event)"
         class="setting-input">
-        @for (provider of settingsService.providers; track provider) {
+        @for (provider of providers(); track provider) {
           <option [value]="provider">{{ provider | titlecase }}</option>
         }
       </select>
@@ -39,10 +41,10 @@
       <label class="setting-label" for="model-select">Model</label>
       <select 
         id="model-select"
-        [ngModel]="settingsService.selectedModel()" 
-        (ngModelChange)="settingsService.updateModel($event)" 
+        [ngModel]="selectedModel()"
+        (ngModelChange)="updateModel($event)"
         class="setting-input">
-        @for (model of settingsService.models(); track model) {
+        @for (model of models(); track model) {
           <option [value]="model">{{ model }}</option>
         }
       </select>
@@ -53,25 +55,28 @@
       <label class="setting-label" for="voice-select">Voice</label>
       <select 
         id="voice-select"
-        [ngModel]="settingsService.selectedVoice()" 
-        (ngModelChange)="settingsService.updateVoice($event)" 
+        [ngModel]="selectedVoice()"
+        (ngModelChange)="updateVoice($event)"
         class="setting-input">
-        @for (voice of settingsService.voices(); track voice) {
+        @for (voice of voices(); track voice) {
           <option [value]="voice">{{ voice | titlecase }}</option>
         }
       </select>
-    </div>    <!-- API Key -->
+    </div>
+
+    <!-- API Key -->
     <div class="settings-section">
       <label class="setting-label" for="api-key-input">API Key</label>
       <input 
         id="api-key-input"
-        type="password" 
-        [ngModel]="settingsService.apiKey()" 
-        (ngModelChange)="settingsService.updateApiKey($event)"
-        placeholder="Enter API Key" 
+        type="password"
+        [ngModel]="apiKey()"
+        (ngModelChange)="updateApiKey($event)"
+        placeholder="Enter API Key"
         class="setting-input">
     </div>
   </div>
+
   <!-- Footer -->
   <div class="settings-footer">
     <div class="footer-content">

@@ -7,17 +7,17 @@ import { QueryId, TTSResultStatus } from '../domain/tts.entity'; // Assuming Que
   providedIn: 'root'
 })
 export class AngularTTSService {
-
   private http = inject(HttpClient);
-
-  async downloadAudio(result: TTSResult): Promise<string | undefined> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async downloadAudio(_result: TTSResult): Promise<string | undefined> {
     // Placeholder implementation - Audio playback is handled by AudioPlayerComponent
     // This method might not be strictly necessary if audio is played directly from TTSResult
     // If needed, implement logic to create a Blob URL or similar
     return undefined;
   }
 
-  async saveSettings(settings: TTSSettings): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async saveSettings(_settings: TTSSettings): Promise<void> {
     // Placeholder implementation - Settings are currently managed by SettingsService
     // This could be extended to save settings to localStorage or an API later.
   }
@@ -66,8 +66,7 @@ export class AngularTTSService {
       } else {
         console.warn('[TTS] OpenAI API request returned no audio blob');
         return undefined;
-      }
-    } catch (error: any) {
+      }    } catch (error: unknown) {
       console.error('[TTS] Error calling OpenAI API:', error);
       // Return undefined or a result with error status
        return undefined;

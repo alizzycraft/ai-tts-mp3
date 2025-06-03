@@ -55,17 +55,17 @@ export class LoggingService {
 
   info(message: string, category?: string, metadata?: Record<string, unknown>): void {
     this.log(LogLevel.INFO, message, category, metadata);
-    BaseLogger.info(`[${category || 'General'}] ${message}`, metadata);
+    BaseLogger.info(`[${category || 'General'}] ${message}`, ...(metadata ? [metadata] : []));
   }
 
   warn(message: string, category?: string, metadata?: Record<string, unknown>): void {
     this.log(LogLevel.WARN, message, category, metadata);
-    BaseLogger.warn(`[${category || 'General'}] ${message}`, metadata);
+    BaseLogger.warn(`[${category || 'General'}] ${message}`, ...(metadata ? [metadata] : []));
   }
 
   error(message: string, error?: Error, category?: string, metadata?: Record<string, unknown>): void {
     this.log(LogLevel.ERROR, message, category, { ...metadata, error: error?.message }, error);
-    BaseLogger.error(`[${category || 'General'}] ${message}`, error, metadata);
+    BaseLogger.error(`[${category || 'General'}] ${message}`, error, ...(metadata ? [metadata] : []));
   }
 
   critical(message: string, error?: Error, category?: string, metadata?: Record<string, unknown>): void {

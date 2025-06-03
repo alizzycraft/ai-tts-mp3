@@ -1,5 +1,5 @@
 // Google Cloud Text-to-Speech provider implementation
-import { Injectable } from '@angular/core';
+import { Injectable, signal, computed, effect } from '@angular/core';
 import { LoggingService } from '../logging.service';
 import { MonitoringService } from '../monitoring.service';
 import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus } from '../../domain/tts.entity';
@@ -43,13 +43,43 @@ export interface GoogleTTSRequest {
 })
 export class GoogleTTSService {
   private readonly baseUrl = 'https://texttospeech.googleapis.com/v1';
-  private cachedVoices: GoogleVoice[] | null = null;
+
+  // Reactive state with signals
+  private cachedVoices = signal<GoogleVoice[] | null>(null);
+  private isValidated = signal<boolean>(false);
+  private synthesisCount = signal<number>(0);
+  private errorCount = signal<number>(0);
+
+  // Computed reactive properties
+  readonly voicesCount = computed(() => this.cachedVoices()?.length || 0);
+  readonly successRate = computed(() => {
+    const total = this.synthesisCount() + this.errorCount();
+    return total > 0 ? (this.synthesisCount() / total) * 100 : 0;
+  });
+  readonly providerStatus = computed(() => {
+    if (!this.isValidated()) return 'not-validated';
+    if (this.errorCount() > this.synthesisCount()) return 'degraded';
+    return 'healthy';
+  });
 
   constructor(
     private logging: LoggingService,
     private monitoring: MonitoringService
   ) {
     this.logging.info('GoogleTTSService initialized', 'Google');
+
+    // Effects for reactive behaviors
+    effect(() => {
+      // Monitor provider health
+      const status = this.providerStatus();
+      if (status === 'degraded') {
+        this.logging.warn(`Google provider status: ${status}`, 'Google', {
+          synthesisCount: this.synthesisCount(),
+          errorCount: this.errorCount(),
+          successRate: this.successRate()
+        });
+      }
+    });
   }
 
   // Core TTS functionality
@@ -77,7 +107,8 @@ export class GoogleTTSService {
           const audioData = await this.makeTextToSpeechRequest(text, settings);
           const processingTime = Date.now() - startTime;
 
-          this.monitoring.recordRequest(ModelProvider.GOOGLE, true, processingTime);          const result: TTSResult = {
+          this.monitoring.recordRequest('google_synthesis', processingTime, true, ModelProvider.GOOGLE);
+          this.synthesisCount.update(count => count + 1);          const result: TTSResult = {
             queryId,
             status: TTSResultStatus.COMPLETED,
             createdAt: new Date(),
@@ -98,7 +129,8 @@ export class GoogleTTSService {
 
         } catch (error) {
           const processingTime = Date.now() - startTime;
-          this.monitoring.recordRequest(ModelProvider.GOOGLE, false, processingTime);
+          this.monitoring.recordRequest('google_synthesis', processingTime, false, ModelProvider.GOOGLE);
+          this.errorCount.update(count => count + 1);
 
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
           this.logging.error('Google synthesis failed', error as Error, 'Google');          const result: TTSResult = {
@@ -120,11 +152,10 @@ export class GoogleTTSService {
       'Google'
     );
   }
-
   // Voice management
   async getAvailableVoices(apiKey: string): Promise<Result<GoogleVoice[], string>> {
-    if (this.cachedVoices) {
-      return Result.success(this.cachedVoices);
+    if (this.cachedVoices()) {
+      return Result.success(this.cachedVoices()!);
     }
 
     return this.logging.trackPerformance(
@@ -139,13 +170,11 @@ export class GoogleTTSService {
 
           if (!response.ok) {
             throw new Error(`Failed to fetch voices: ${response.status} ${response.statusText}`);
-          }
+          }          const data = await response.json();
+          this.cachedVoices.set(data.voices);
 
-          const data = await response.json();
-          this.cachedVoices = data.voices;
-
-          this.logging.info(`Retrieved ${this.cachedVoices!.length} Google voices`, 'Google');
-          return Result.success(this.cachedVoices!);
+          this.logging.info(`Retrieved ${this.cachedVoices()!.length} Google voices`, 'Google');
+          return Result.success(this.cachedVoices()!);
 
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to fetch voices';
@@ -219,9 +248,8 @@ export class GoogleTTSService {
     const voicesResult = await this.getAvailableVoices(settings.apiKey.getValue());
     if (voicesResult.isFailure()) {
       return Result.failure(`Invalid API key: ${voicesResult.getError()}`);
-    }
-
-    this.logging.info('Google configuration validated successfully', 'Google');
+    }    this.logging.info('Google configuration validated successfully', 'Google');
+    this.isValidated.set(true);
     return Result.success(true);
   }
 
@@ -260,10 +288,9 @@ export class GoogleTTSService {
   getVoicesByGender(voices: GoogleVoice[], gender: 'MALE' | 'FEMALE' | 'NEUTRAL'): GoogleVoice[] {
     return voices.filter(voice => voice.ssmlGender === gender);
   }
-
   // Clear caches
   clearCache(): void {
-    this.cachedVoices = null;
+    this.cachedVoices.set(null);
     this.logging.info('Google cache cleared', 'Google');
   }
 

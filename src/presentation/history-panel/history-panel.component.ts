@@ -1,296 +1,404 @@
-import { Component, signal, computed, Output, EventEmitter, ChangeDetectorRef } from '@angular/core';
+import { Component, signal, computed, input, output, TemplateRef, ViewChild, AfterViewInit, ChangeDetectionStrategy, DestroyRef, inject, Injector, runInInjectionContext } from '@angular/core';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { filter, combineLatest, distinctUntilChanged } from 'rxjs';
 import { IntegratedHistoryStorageService, HistoryItem, StorageInfo, FileSystemStorageState, FolderReconnectionPrompt } from '../../integration/history-storage.service';
-import { PlaybackService } from '../../integration/playback.service'; // Corrected path
-import { FormatDatePipe } from '../shared/pipes/format-date.pipe'; // Corrected path
-import { FormatFileSizePipe } from '../shared/pipes/format-file-size.pipe'; // Corrected path
-import { FormatDurationPipe } from '../shared/pipes/format-duration.pipe'; // Corrected path
-import { TruncateTextPipe } from '../shared/pipes/truncate-text.pipe'; // Corrected path
+import { StorageInfoComponent } from './components/storage-info/storage-info.component';
+import { FileSystemManagerComponent } from './components/file-system-manager/file-system-manager.component';
+import { TruncateTextPipe } from '../shared/pipes/truncate-text.pipe';
+import { FormatDatePipe } from '../shared/pipes/format-date.pipe';
+import { FormatFileSizePipe } from '../shared/pipes/format-file-size.pipe';
+import { ModalService } from '../../shared/modal.service';
+
+interface ReconnectModalResult {
+  confirmed: boolean;
+}
 
 @Component({
   selector: 'app-history-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule, FormatDatePipe, FormatFileSizePipe, FormatDurationPipe, TruncateTextPipe],
-  templateUrl: './history-panel.component.html',
-  styleUrl: './history-panel.component.scss'
+  imports: [
+    CommonModule,
+    FormsModule,
+    StorageInfoComponent,
+    FileSystemManagerComponent,
+    TruncateTextPipe,
+    FormatDatePipe,
+    FormatFileSizePipe
+  ],
+  template: `
+    <!-- Main Panel -->
+    <div class="history-panel">
+      <!-- Header -->
+      <div class="history-header">
+        <div class="header-content">
+          <h2 class="panel-title">History</h2>
+          <button (click)="onClearAllClick()" class="clear-all-btn">
+            Clear All
+          </button>
+        </div>
+        <div class="search-box">
+          <input
+            type="text"
+            [ngModel]="searchQuery()"
+            (ngModelChange)="searchQuery.set($event)"
+            placeholder="Search history..."
+            class="search-input"
+          />
+        </div>
+      </div>
+
+      <!-- Storage Info -->
+      @if (showStorageBar()) {
+        <app-storage-info
+          [storageInfo]="storageInfo$()"
+          [warningLevel]="storageWarningLevel()"
+          [showStorageBar]="true"
+        />
+      }
+
+      <!-- File System Storage -->
+      <app-file-system-manager
+        [state]="fileSystemState$()"
+        (toggle)="onToggleStorage()"
+        (changeFolder)="onChangeFolder()"
+      />      
+      <!-- History Content -->
+      <div class="history-content">
+        @if (filteredHistory().length) {
+          <div class="history-list" role="list">
+            @for (item of filteredHistory(); track trackByFn(0, item)) {
+              <div
+                class="history-item"
+                [class.selected]="item.id === selectedItemId()"
+                [class.playing]="item.id === playingItemId() && isPlaying()"
+                (click)="selectItem(item)"
+                role="listitem"
+                tabindex="0"
+              >
+                <div class="item-header">
+                  <span class="item-title">
+                    {{ item.metadata?.title || (item.text | truncateText:50) }}
+                  </span>
+                  <div class="item-actions">
+                    <button 
+                      class="action-btn play-btn" 
+                      (click)="onHistoryItemPlayPauseClick(item, $event)"
+                      [attr.aria-label]="item.id === playingItemId() && isPlaying() ? 'Pause' : 'Play'"
+                    >
+                      @if (item.id === playingItemId() && isPlaying()) {
+                        <img src="assets/icons/outline/pause.svg" width="16" height="16" alt="Pause">
+                      } @else {
+                        <img src="assets/icons/outline/play.svg" width="16" height="16" alt="Play">
+                      }
+                    </button>
+                    <button 
+                      class="action-btn download-btn" 
+                      (click)="onDownloadHistoryItem(item, $event)"
+                      aria-label="Download"
+                    >
+                      <img src="assets/icons/outline/download.svg" width="16" height="16" alt="Download">
+                    </button>
+                    <button 
+                      class="action-btn delete-btn" 
+                      (click)="onDeleteClick(item, $event)"
+                      aria-label="Delete"
+                    >
+                      <img src="assets/icons/outline/trash.svg" width="16" height="16" alt="Delete">
+                    </button>
+                  </div>
+                </div>
+                <div class="item-info">
+                  <time class="item-date">{{ item.createdAt | formatDate }}</time>
+                  <span class="item-size">{{ item.audioSize | formatFileSize }}</span>
+                </div>
+              </div>
+            }
+          </div>
+        } @else {
+          <div class="empty-state">
+            <div class="empty-icon">📝</div>
+            <div class="empty-message">No history items found</div>
+            <div class="empty-hint">Generated audio files will appear here</div>
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- Modal Templates -->
+    <ng-template #deleteModal let-item>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Delete Item</h3>
+          <button class="modal-close-btn" (click)="onModalClose()" aria-label="Close">
+            <img src="assets/icons/outline/x.svg" width="16" height="16" alt="Close">
+          </button>
+        </div>
+        <div class="modal-body">
+          <p>Are you sure you want to delete this item?</p>
+          <div class="item-preview">
+            {{ item.metadata?.title || (item.text | truncateText:100) }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="modal-btn secondary" (click)="onModalClose()">Cancel</button>
+          <button class="modal-btn primary" (click)="confirmDelete()">Delete</button>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template #clearModal>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Clear All History</h3>
+          <button class="modal-close-btn" (click)="onModalClose()" aria-label="Close">
+            <img src="assets/icons/outline/x.svg" width="16" height="16" alt="Close">
+          </button>
+        </div>
+        <div class="modal-body">
+          <p>Are you sure you want to clear all history items? This action cannot be undone.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="modal-btn secondary" (click)="onModalClose()">Cancel</button>
+          <button class="modal-btn primary" (click)="confirmClearAll()">Clear All</button>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template #reconnectModal let-prompt>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Reconnect to Folder</h3>
+          <button class="modal-close-btn" (click)="onModalClose()" aria-label="Close">
+            <img src="assets/icons/outline/x.svg" width="16" height="16" alt="Close">
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-message">Would you like to reconnect to the previously used storage folder?</p>
+          <div class="folder-info">
+            <img src="assets/icons/outline/folder.svg" width="20" height="20" alt="Folder">
+            <span class="folder-name">{{ prompt.previousPath }}</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button 
+            class="modal-btn secondary" 
+            (click)="onReconnectConfirm(false)"
+            aria-label="Use Default Storage">
+            No, Use Default
+          </button>
+          <button 
+            class="modal-btn primary"
+            (click)="onReconnectConfirm(true)"
+            aria-label="Reconnect to Folder">
+            Yes, Reconnect
+          </button>
+        </div>
+      </div>
+    </ng-template>
+  `,
+  styleUrls: ['./history-panel.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class HistoryPanelComponent {
-  @Output() historyItemSelected = new EventEmitter<HistoryItem | null>();
-  @Output() playItem = new EventEmitter<HistoryItem>();
-  // State - removed collapsible functionality
+export class HistoryPanelComponent implements AfterViewInit {  @ViewChild('deleteModal') deleteModal!: TemplateRef<{ $implicit: HistoryItem }>;
+  @ViewChild('clearModal') clearModal!: TemplateRef<{ $implicit: unknown }>;
+  @ViewChild('reconnectModal') reconnectModal!: TemplateRef<{ $implicit: FolderReconnectionPrompt }>;
+
+  // Dependencies
+  readonly modalService = inject(ModalService);
+  private readonly historyService = inject(IntegratedHistoryStorageService);
+  private readonly destroyRef = inject(DestroyRef);
+
+  // View state
+  private readonly viewInitialized = signal(false);
+  
+  // Inputs/Outputs
+  playingItemId = input<string | null>(null);
+  isPlaying = input<boolean>(false);
+  historyItemSelected = output<HistoryItem | null>();
+  playItem = output<HistoryItem>();
+
+  // State signals
   searchQuery = signal('');
   selectedItemId = signal<string | null>(null);
-  showClearModal = signal(false);
-  showDeleteModal = signal(false);
-  itemToDelete = signal<HistoryItem | null>(null);
-  // Data
-  history = signal<HistoryItem[]>([]);
-  storageInfo = signal<StorageInfo>({ used: 0, available: 0, total: 0, usedPercentage: 0, itemCount: 0 });
-  fileSystemState = signal<FileSystemStorageState>({ 
-    isSupported: false, 
-    isEnabled: false, 
-    directoryHandle: null, 
-    selectedPath: null 
-  });
-  folderReconnectionPrompt = signal<FolderReconnectionPrompt | null>(null);
 
-  // Computed properties
-  filteredHistory = computed(() => {
+  // Observable-derived signals
+  readonly history$ = toSignal(this.historyService.history$, { initialValue: [] });
+  readonly storageInfo$ = toSignal(this.historyService.storageInfo$, { 
+    initialValue: { used: 0, available: 0, total: 0, usedPercentage: 0, itemCount: 0 } 
+  });
+  readonly fileSystemState$ = toSignal(this.historyService.fileSystemState$, {
+    initialValue: {
+      isSupported: false,
+      isEnabled: false,
+      directoryHandle: null,
+      selectedPath: null
+    }
+  });
+  readonly folderReconnectionPrompt$ = toSignal(this.historyService.folderReconnectionPrompt$, {
+    initialValue: null
+  });
+
+  // Pure computed signals for state derivation - no side effects
+  readonly shouldShowReconnectionModal = computed(() => {
+    const isViewReady = this.viewInitialized();
+    const prompt = this.folderReconnectionPrompt$();
+    return isViewReady && prompt?.shouldPrompt && !this.modalService.template();
+  });
+
+  readonly filteredHistory = computed(() => {
     const query = this.searchQuery().toLowerCase();
-    if (!query) return this.history();
+    if (!query) return this.history$();
     
-    return this.history().filter(item => 
+    return this.history$().filter(item => 
       item.text.toLowerCase().includes(query) ||
       item.metadata?.title?.toLowerCase().includes(query) ||
       item.metadata?.tags?.some(tag => tag.toLowerCase().includes(query))
     );
   });
 
-  storageWarningLevel = computed(() => {
-    const percentage = this.storageInfo().usedPercentage;
+  readonly storageWarningLevel = computed(() => {
+    const percentage = this.storageInfo$().usedPercentage;
     if (percentage > 0.9) return 'critical';
     if (percentage > 0.8) return 'warning';
     return 'normal';
   });
-  storageDisplayPercentage = computed(() => {
-    return Math.round(this.storageInfo().usedPercentage * 100);
+
+  readonly showStorageBar = computed(() => {
+    return !this.fileSystemState$().isEnabled;
   });
 
-  // File system storage computed properties
-  showStorageBar = computed(() => {
-    return !this.fileSystemState().isEnabled;
-  });
+  constructor() {
+    // Set up reconnection prompt handling
+    this.setupReconnectionPromptHandler();
+  }
 
-  showFolderPath = computed(() => {
-    return this.fileSystemState().isEnabled && this.fileSystemState().selectedPath;
-  });
-  lockIconSrc = computed(() => {
-    return this.fileSystemState().isEnabled 
-      ? 'assets/icons/outline/archive.svg'  // Unlocked/open storage
-      : 'assets/icons/outline/bookmark.svg'; // Locked/limited storage
-  });
+  ngAfterViewInit(): void {
+    this.viewInitialized.set(true);
+  }
 
-  lockIconTooltip = computed(() => {
-    const state = this.fileSystemState();
-    if (!state.isSupported) {
-      return 'File System Access API not supported in this browser';
+  // Modal Handlers
+  async onDeleteClick(item: HistoryItem, event: Event): Promise<void> {
+    event.stopPropagation();
+    const confirmed = await this.modalService.show({
+      template: this.deleteModal,
+      context: { $implicit: item }
+    });
+    
+    if (confirmed) {
+      await this.historyService.deleteHistoryItem(item.id);
     }
-    return state.isEnabled 
-      ? 'Disable unlimited file system storage'
-      : 'Enable unlimited file system storage';
-  });
+  }
+  async onClearAllClick(): Promise<void> {
+    const confirmed = await this.modalService.show({
+      template: this.clearModal,
+      context: { $implicit: undefined }
+    });
+    if (confirmed) {
+      await this.historyService.clearHistory();
+    }
+  }
 
-  canClickLock = computed(() => {
-    return this.fileSystemState().isSupported;
-  });
-  constructor(private historyService: IntegratedHistoryStorageService,
-              public playbackService: PlaybackService,
-              public cdr: ChangeDetectorRef) {
-    // Subscribe to history changes
-    this.historyService.history$.subscribe(history => {
-      console.log(`[HistoryPanel] Received history update: ${history.length} items`);
-      // Sort history by creation date (newest first)
-      const sortedHistory = [...history].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      this.history.set(sortedHistory);
+  onModalClose(): void {
+    this.modalService.close();
+  }
+
+  confirmDelete(): void {
+    this.modalService.close(true);
+  }
+
+  confirmClearAll(): void {
+    this.modalService.close(true);
+  }
+
+  onReconnectConfirm(confirmed: boolean): void {
+    this.modalService.close(confirmed);
+  }
+
+  private setupReconnectionPromptHandler(): void {
+    const shouldShow$ = toObservable(this.shouldShowReconnectionModal);
+    const prompt$ = toObservable(this.folderReconnectionPrompt$);
+
+    // Combine the latest values and handle modal display
+    combineLatest([shouldShow$, prompt$]).pipe(
+      takeUntilDestroyed(this.destroyRef),
+      // Type-safe filter that ensures both values are present
+      filter((value): value is [boolean, FolderReconnectionPrompt] => 
+        value[0] === true && value[1] !== null && value[1] !== undefined
+      ),
+      distinctUntilChanged()
+    ).subscribe(async ([_, prompt]) => {
+      // Show modal and await result
+      const confirmed = await this.modalService.show({
+        template: this.reconnectModal,
+        context: { $implicit: prompt }
+      });
       
-      // Automatically select the latest item when the history list is updated
-      if (sortedHistory.length > 0) {
-        const latestItem = sortedHistory[0]; // Latest item is now the first after sorting
-        // Only select if no item is currently selected or if the latest item is different
-        if (!this.selectedItemId() || this.selectedItemId() !== latestItem.id) {
-          this.selectItem(latestItem);
-          // Manually trigger change detection to ensure the UI updates after selection
-          this.cdr.detectChanges();
-        }
-      }
-    });
-
-    // Subscribe to storage info changes
-    this.historyService.storageInfo$.subscribe(storageInfo => {
-      this.storageInfo.set(storageInfo);
-    });
-    // Subscribe to file system state changes
-    this.historyService.fileSystemState$.subscribe(state => {
-      this.fileSystemState.set(state);
-    });
-
-    // Subscribe to folder reconnection prompts
-    this.historyService.folderReconnectionPrompt$.subscribe(prompt => {
-      this.folderReconnectionPrompt.set(prompt);
+      // Handle result
+      await this.historyService.handleFolderReconnection(!!confirmed);
     });
   }
 
-  // Actions
+  // History item actions
   selectItem(item: HistoryItem): void {
-    // Use a small timeout to ensure the history list has potentially rendered the new item
-    // setTimeout(() => {
-      this.selectedItemId.set(item.id);
-      this.historyItemSelected.emit(item);
-    // }, 0); // Zero delay timeout
+    this.selectedItemId.set(item.id);
+    this.historyItemSelected.emit(item);
   }
 
+  onHistoryItemPlayPauseClick(item: HistoryItem, event: Event): void {
+    event.stopPropagation();
+    if (!event.isTrusted) return;
+    
+    this.selectItem(item);
+    this.playItem.emit(item);
+  }
+
+  onDownloadHistoryItem(item: HistoryItem, event: Event): void {
+    event.stopPropagation();
+    
+    const fileName = `tts-${item.id}-${item.settings.provider.toLowerCase()}.mp3`;
+    const audioData = item.result.audioData;
+    
+    if (audioData) {
+      const blob = new Blob([audioData], { type: 'audio/mpeg' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  // File system actions  
+  onToggleStorage(): void {
+    const state = this.fileSystemState$();
+    if (state.isEnabled) {
+      this.historyService.disableFileSystemStorage();
+    } else {
+      this.historyService.enableFileSystemStorage();
+    }
+  }
+
+  onChangeFolder(): void {
+    // Only allow changing folder if already enabled
+    if (this.fileSystemState$().isEnabled) {
+      this.historyService.enableFileSystemStorage(); // This will prompt for a new folder
+    }
+  }
+
+  // Utility functions
+  trackByFn(index: number, item: HistoryItem): string {
+    return item.id;
+  }
+
+  /** Clears the current selection and notifies parent */
   clearSelection(): void {
     this.selectedItemId.set(null);
     this.historyItemSelected.emit(null);
-  }
-
-  // Add new method to handle play/pause click on a history item
-  onHistoryItemPlayPauseClick(item: HistoryItem, event: Event): void {
-    event.stopPropagation(); // Prevent the default item selection behavior
-
-    // Check if the event was triggered by a user interaction
-    if (!event.isTrusted) {
-      return; // Ignore programmatic clicks
-    }
-
-    // Check if the clicked item is currently playing
-    if (this.playbackService.playingItemId() === item.id && this.playbackService.isPlaying()) {
-      this.playbackService.pause(); // Pause if this item is currently playing
-    } else {
-      // Select the item before toggling playback
-      this.selectItem(item);
-      // Then call PlaybackService to toggle playback for this item
-      this.playbackService.togglePlayPause(item); 
-    }
-  }
-
-  async deleteItem(item: HistoryItem, event: Event): Promise<void> {
-    event.stopPropagation();
-    if (this.playbackService.playingItemId() === item.id) {
-        this.playbackService.stop();
-    }
-    this.itemToDelete.set(item);
-    this.showDeleteModal.set(true);
-  }
-
-  async confirmDeleteItem(): Promise<void> {
-    const item = this.itemToDelete();
-    if (item) {
-      await this.historyService.removeFromHistory(item.id);
-      if (this.selectedItemId() === item.id) {
-        this.selectedItemId.set(null);
-      }
-    }
-    this.showDeleteModal.set(false);
-    this.itemToDelete.set(null);
-  }
-
-  cancelDeleteItem(): void {
-    this.showDeleteModal.set(false);
-    this.itemToDelete.set(null);
-  }
-  async clearAllHistory(): Promise<void> {
-    this.showClearModal.set(true);
-  }
-
-  async confirmClearAll(): Promise<void> {
-    await this.historyService.clearHistory();
-    this.selectedItemId.set(null);
-    this.showClearModal.set(false);
-  }
-  cancelClearAll(): void {
-    this.showClearModal.set(false);
-  }
-
-  // File system storage methods
-  async toggleFileSystemStorage(): Promise<void> {
-    const state = this.fileSystemState();
-    
-    if (!state.isSupported) return;
-
-    try {
-      if (state.isEnabled) {
-        await this.historyService.disableFileSystemStorage();
-      } else {
-        await this.historyService.enableFileSystemStorage();
-      }
-    } catch (error) {
-      console.error('Failed to toggle file system storage:', error);
-    }
-  }
-
-  // Folder reconnection methods
-  async reconnectToFolder(): Promise<void> {
-    await this.historyService.handleFolderReconnection(true);
-  }
-
-  async declineReconnection(): Promise<void> {
-    await this.historyService.handleFolderReconnection(false);
-  }
-
-  // Change folder method
-  async changeFolder(): Promise<void> {
-    await this.historyService.enableFileSystemStorage();
-  }
-
-  // Panel control methods removed - panel is always open
-
-  // Utility methods
-  getProviderIcon(provider: string): string {
-    switch (provider.toLowerCase()) {
-      case 'openai': return 'robot';
-      case 'elevenlabs': return 'music';
-      case 'azure': return 'cloud';
-      case 'google': return 'search';
-      case 'aws': return 'package';
-      default: return 'microphone';
-    }
-  }
-  getVoiceIcon(voice: string): string {
-    // For OpenAI voices, use actual icon names
-    const openAIVoiceIcons: Record<string, string> = {
-      'alloy': 'ghost-3',      
-      'echo': 'moon',          
-      'fable': 'clover',       
-      'onyx': 'carambola',     
-      'nova': 'flower',        
-      'shimmer': 'sunglasses',      
-      'coral': 'seedling',     // Use seedling for coral
-      'ash': 'ghost-3',        // fallback for new voices
-      'sage': 'ghost-3',       // fallback for new voices
-      'rachel': 'ghost-3',     
-      'drew': 'moon',          
-      'clyde': 'clover'        
-    };
-    return openAIVoiceIcons[voice.toLowerCase()] || 'microphone';
-  }
-
-  // Helper method to get voice display text for non-OpenAI providers
-  getVoiceDisplayText(voice: string, provider: string): string {
-    // For Azure, AWS, and Google voices, extract language code or return voice name
-    if (['azure', 'aws', 'google'].includes(provider.toLowerCase())) {
-      // Try to extract language code from voice name (e.g., 'en-US-AriaNeural' -> 'en-US')
-      const langMatch = voice.match(/^([a-z]{2}-[A-Z]{2})/);
-      if (langMatch) {
-        return langMatch[1];
-      }
-      // Fallback to first part of voice name
-      const parts = voice.split('-');
-      return parts.length > 1 ? parts[0].toUpperCase() : voice.substring(0, 3).toUpperCase();
-    }
-    return voice;
-  }
-
-  async downloadHistoryItem(item: HistoryItem, event: Event): Promise<void> {
-    event.stopPropagation();
-    
-    if (!item.result.audioData) return;
-
-    try {
-      const blob = new Blob([item.result.audioData], { type: 'audio/mpeg' });
-      const url = URL.createObjectURL(blob);
-      
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `tts-${item.metadata?.title || 'audio'}-${item.createdAt.getTime()}.mp3`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Failed to download audio:', error);
-    }
   }
 }

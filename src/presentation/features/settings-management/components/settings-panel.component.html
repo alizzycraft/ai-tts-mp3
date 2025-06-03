@@ -1,0 +1,82 @@
+<!-- Settings Panel Component -->
+<div class="settings-panel">
+  <!-- App Header -->
+  <div class="app-header">
+    <h2 class="app-title">
+      <img src="assets/icons/outline/microphone.svg" width="20" height="20" class="inline-icon" alt="Microphone icon">
+      AI-TTS-MP3
+    </h2>
+    <p class="app-subtitle">Text to MP3 conversion</p>
+  </div>
+
+  <!-- Header -->
+  <div class="settings-header">
+    <div class="header-content">
+      <h3 class="panel-title">
+        <img src="assets/icons/outline/robot.svg" width="18" height="18" class="inline-icon" alt="Settings icon">
+        Settings
+      </h3>
+    </div>
+  </div>
+  <!-- Settings Content -->
+  <div class="settings-content">    <!-- Voice Provider Selection -->
+    <div class="settings-section">
+      <label class="setting-label" for="provider-select">Voice Provider</label>
+      <select 
+        id="provider-select"
+        [ngModel]="selectedProvider()" 
+        (ngModelChange)="updateProvider($event)" 
+        class="setting-input">
+        @for (provider of providers(); track provider) {
+          <option [value]="provider">{{ provider | titlecase }}</option>
+        }
+      </select>
+    </div>
+
+    <!-- Model Selection -->
+    <div class="settings-section">
+      <label class="setting-label" for="model-select">Model</label>
+      <select 
+        id="model-select"
+        [ngModel]="selectedModel()" 
+        (ngModelChange)="updateModel($event)" 
+        class="setting-input">
+        @for (model of models(); track model) {
+          <option [value]="model">{{ model }}</option>
+        }
+      </select>
+    </div>
+
+    <!-- Voice Selection -->
+    <div class="settings-section">
+      <label class="setting-label" for="voice-select">Voice</label>
+      <select 
+        id="voice-select"
+        [ngModel]="selectedVoice()" 
+        (ngModelChange)="updateVoice($event)" 
+        class="setting-input">
+        @for (voice of voices(); track voice) {
+          <option [value]="voice">{{ voice | titlecase }}</option>
+        }
+      </select>
+    </div>    <!-- API Key -->
+    <div class="settings-section">
+      <label class="setting-label" for="api-key-input">API Key</label>
+      <input 
+        id="api-key-input"
+        type="password" 
+        [ngModel]="apiKey()" 
+        (ngModelChange)="updateApiKey($event)"
+        placeholder="Enter API Key" 
+        class="setting-input">
+    </div>
+  </div>
+  <!-- Footer -->
+  <div class="settings-footer">
+    <div class="footer-content">
+      <div class="footer-center">
+        <span class="settings-text">Licensed under AGPL v3</span>
+      </div>
+    </div>
+  </div>
+</div>

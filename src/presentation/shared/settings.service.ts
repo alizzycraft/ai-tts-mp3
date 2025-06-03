@@ -11,7 +11,6 @@ export class SettingsService {
   constructor(@Inject(PLATFORM_ID) private platformId: object) {
     this.isBrowser = isPlatformBrowser(platformId);
   }
-
   // Settings state using signals
   selectedProvider = signal<ModelProvider>(ModelProvider.OPENAI);
   selectedModel = signal('tts-1');
@@ -21,7 +20,7 @@ export class SettingsService {
   historyTitle = signal('');
 
   // Available options for dropdowns
-  providers = Object.values(ModelProvider).filter(p => PROVIDER_FLAGS[p as ModelProvider]);
+  readonly providers: ModelProvider[] = Object.values(ModelProvider).filter(p => PROVIDER_FLAGS[p as ModelProvider]);
 
   openAIVoices = [
     'nova', 'shimmer', 'echo', 'onyx', 'fable', 'alloy', 'ash', 'sage', 'coral'
@@ -86,51 +85,54 @@ export class SettingsService {
   }
 
   loadSavedSettings() {
-    try {
-      let saved = null;
-      if (this.isBrowser) {
-        saved = localStorage.getItem('tts_settings');
-      }
-      if (saved) {
-        const settings = JSON.parse(saved);
-        this.selectedProvider.set(settings.provider || ModelProvider.OPENAI);
-        this.selectedModel.set(settings.model || 'tts-1');
-        this.selectedVoice.set(settings.voice || Voice.ALLOY);
-        const loadedSaveToHistory = settings.saveToHistory ?? true;
-        this.saveToHistory.set(loadedSaveToHistory);
-      }
-    } catch (error) {
-      console.warn('Failed to load saved settings:', error);
+    let saved = null;
+    if (this.isBrowser) {
+      saved = localStorage.getItem('tts_settings');
+    }
+    if (saved) {
+      const settings = JSON.parse(saved);
+      // Ensure saved provider is one of the available providers, fallback to default if not
+      const loadedProvider = this.providers.includes(settings.provider) ? settings.provider : ModelProvider.OPENAI;
+      this.selectedProvider.set(loadedProvider);
+      this.selectedModel.set(settings.model || 'tts-1');
+      this.selectedVoice.set(settings.voice || Voice.ALLOY);
+      const loadedSaveToHistory = settings.saveToHistory ?? true;
+      this.saveToHistory.set(loadedSaveToHistory);
+    } else {
+      // If no saved settings, set default provider here
+      this.selectedProvider.set(ModelProvider.OPENAI);
+      this.selectedModel.set('tts-1');
+      this.selectedVoice.set(Voice.ALLOY);
+      this.saveToHistory.set(true);
     }
   }
 
-  // Methods to update settings and auto-save
-  updateProvider(provider: ModelProvider) {
+  // Settings update methods
+  updateProvider(provider: ModelProvider): void {
     this.selectedProvider.set(provider);
     this.onProviderChange();
   }
-
-  updateModel(model: string) {
+  
+  updateModel(model: string): void {
     this.selectedModel.set(model);
     this.saveSettings();
   }
 
-  updateVoice(voice: Voice) {
+  updateVoice(voice: Voice): void {
     this.selectedVoice.set(voice);
     this.saveSettings();
   }
 
-  updateApiKey(apiKey: string) {
-    // Set the API key in memory only, do not save to storage
+  updateApiKey(apiKey: string): void {
     this.apiKey.set(apiKey);
   }
-
-  updateSaveToHistory(saveToHistory: boolean) {
+  
+  updateSaveToHistory(saveToHistory: boolean): void {
     this.saveToHistory.set(saveToHistory);
     this.saveSettings();
   }
-
-  updateHistoryTitle(title: string) {
+  
+  updateHistoryTitle(title: string): void {
     this.historyTitle.set(title);
   }
 }

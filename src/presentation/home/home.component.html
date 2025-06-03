@@ -1,4 +1,4 @@
- <!-- GitHub Banner -->
+<!-- GitHub Banner -->
 <div class="github-banner">
   <a href="https://github.com/the-erin-collective/ai-tts-mp3" target="_blank" class="github-banner-link">
     View on GitHub
@@ -42,10 +42,9 @@
       </app-editor>
     </div>
       <!-- Audio Player - Fixed at bottom -->
-    <div class="audio-player-container">
-      <app-audio-player
-      [currentResult]="currentResult"
-      [currentQueryInfo]="currentQueryInfo"
+    <div class="audio-player-container">      <app-audio-player
+      [currentResult]="currentResult()"
+      [currentQueryInfo]="currentQueryInfo()"
       (clearResult)="clearResult()">
       </app-audio-player>
     </div>
@@ -53,6 +52,8 @@
   
   <!-- History Panel -->
   <app-history-panel
+    [playingItemId]="historyInteractionManager.playingItemId()"
+    [isPlaying]="historyInteractionManager.isPlaying()"
     (historyItemSelected)="onHistoryItemSelected($event)"
     (playItem)="onHistoryPanelPlayItem($event)"
   ></app-history-panel>
