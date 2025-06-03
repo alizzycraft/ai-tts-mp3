@@ -3,10 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StorageInfoComponent } from './components/storage-info/storage-info.component';
 import { FileSystemManagerComponent } from './components/file-system-manager/file-system-manager.component';
-import { TruncateTextPipe } from '../shared/pipes/truncate-text.pipe';
-import { FormatDatePipe } from '../shared/pipes/format-date.pipe';
-import { FormatDurationPipe } from '../shared/pipes/format-duration.pipe';
-import { FormatFileSizePipe } from '../shared/pipes/format-file-size.pipe';
+import { HistoryListAreaComponent } from './components/history-list-area/history-list-area.component';
 import { ModelProvider } from '../../domain/tts.entity';
 import { ModalService } from '../../shared/modal.service';
 import { IntegratedHistoryStorageService } from '../../integration/history-storage.service';
@@ -15,15 +12,13 @@ import { FileSystemStorageState, FolderReconnectionPrompt } from '../../infrastr
 
 @Component({
   selector: 'app-history-panel',
-  standalone: true,  imports: [
+  standalone: true,
+  imports: [
     CommonModule,
     FormsModule,
     StorageInfoComponent,
     FileSystemManagerComponent,
-    TruncateTextPipe,
-    FormatDatePipe,
-    FormatDurationPipe,
-    FormatFileSizePipe
+    HistoryListAreaComponent
   ],
   templateUrl: './history-panel.component.html',
   styleUrl: './history-panel.component.scss',
@@ -187,5 +182,10 @@ export class HistoryPanelComponent {
 
   async onChangeFolder(): Promise<void> {
     await this.historyService.enableFileSystemStorage();
+  }
+
+  // Setter for searchQuery signal to be passed to child
+  setSearchQuery(value: string) {
+    this.searchQuery.set(value);
   }
 }

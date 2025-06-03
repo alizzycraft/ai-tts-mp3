@@ -46,20 +46,24 @@ export class OpenAITTSProviderService implements TTSProvider {
   private errorCount = signal(0);
   private lastCheckTime = signal<Date>(new Date());
   private initialized = signal(false);
+  // Cache hit/miss tracking
+  private cacheHits = signal(0);
+  private cacheMisses = signal(0);
   
   // Computed signals for reactive derived data
   readonly cacheSize = computed(() => this.cache().size);
+  readonly cacheHitRate = computed(() => {
+    const hits = this.cacheHits();
+    const misses = this.cacheMisses();
+    const total = hits + misses;
+    return total > 0 ? (hits / total) * 100 : 100;
+  });
   readonly successRate = computed(() => {
     const total = this.synthesisCount();
     const errors = this.errorCount();
     return total > 0 ? ((total - errors) / total) * 100 : 100;
   });
   
-  readonly cacheHitRate = computed(() => {
-    // This would be tracked separately in a real implementation
-    return this.cacheSize() > 0 ? 25 : 0; // Estimate
-  });
-
   readonly cacheStatus = computed(() => {
     const now = new Date();
     this.lastCheckTime.set(now); // Trigger periodic recomputation
@@ -166,9 +170,13 @@ export class OpenAITTSProviderService implements TTSProvider {
           queryId: queryId.getValue()
         });
         // Update metrics for cache hit
+        this.cacheHits.update(h => h + 1);
         this.updateProviderHealth();
         return Result.success(cachedResult);
       }
+
+      // Cache miss
+      this.cacheMisses.update(m => m + 1);
 
       // Validate configuration
       const validationResult = await this.validateConfiguration(settings);
@@ -322,6 +330,7 @@ export class OpenAITTSProviderService implements TTSProvider {
   private getCachedResult(cacheKey: string): TTSResult | null {
     const cached = this.cache().get(cacheKey);
     if (!cached) {
+      // Cache miss
       return null;
     }
 
@@ -332,9 +341,11 @@ export class OpenAITTSProviderService implements TTSProvider {
       const newCache = new Map(currentCache);
       newCache.delete(cacheKey);
       this.cache.set(newCache);
+      // Cache miss (expired)
       return null;
     }
 
+    // Cache hit
     return cached.result;
   }
 
