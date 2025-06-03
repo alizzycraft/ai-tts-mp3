@@ -44,9 +44,11 @@
 
   <!-- Storage Info Component -->
   <app-storage-info
-    [storageInfo]="storageInfo()"
+    [storageInfo]="storageInfoForDisplay()"
     [showStorageBar]="showStorageBar()"
-    [warningLevel]="storageWarningLevel()">
+    [warningLevel]="storageWarningLevel()"
+    (toggleFileSystem)="onToggleStorage()"
+    (changeFolder)="onChangeFolder()">
   </app-storage-info>
 
   <!-- File System Manager Component -->
@@ -67,7 +69,8 @@
     (playItem)="playItem.emit($event)"
     (deleteItem)="deleteItem($event, $event)"
     (clearAll)="onClearAllConfirm()"
-  ></app-history-list-area>
+    style="display: flex; flex-direction: column; height: 100%;"
+    ></app-history-list-area>
 
   <!-- Footer -->
   <div class="history-footer">

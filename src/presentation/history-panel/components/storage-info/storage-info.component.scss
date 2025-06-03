@@ -1,0 +1,146 @@
+/* Storage Info & Folder Storage Info Styles (migrated from history-panel.component.scss) */
+
+:host {
+  display: block;
+  background: #161B22;
+  padding: 0 0.75rem 0 0.75rem; // Restore original horizontal space
+}
+
+.storage-info, .folder-storage-info {
+  margin-top: 1rem; // Small gap above
+  padding: 0.65rem 0.75rem; // Restore original padding
+  font-size: 0.8rem;
+  box-shadow: none;
+}
+
+.bordered-box {
+  border-radius: 8px;
+  border: 1.5px solid #21262D; // Restore original border color
+  background: #161B22; // Restore original background
+  box-shadow: none;
+  margin-bottom: 0; // Remove extra gap
+}
+
+.folder-storage-info.bordered-box {
+  border: 1.5px solid #238636;
+  background: #182625;
+}
+
+.storage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.storage-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #e6edf3;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.storage-lock-btn {
+  background: none;
+  border: none;
+  padding: 0.25rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.storage-lock-btn img {
+  margin: 0;
+}
+
+.storage-lock-btn.clickable:hover {
+  background: #21262d;
+  color: #e6edf3;
+}
+
+.storage-bar {
+  width: 100%;
+  height: 6px;
+  background: #21262d;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.storage-fill {
+  height: 100%;
+  background: #238636;
+  transition: all 0.3s ease;
+}
+
+.storage-info.warning .storage-fill {
+  background: #d29922;
+}
+
+.storage-info.critical .storage-fill {
+  background: #f85149;
+}
+
+.storage-text {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #e6edf3;
+}
+
+.storage-percentage {
+  font-weight: 600;
+}
+
+.storage-details {
+  color: #7d8590;
+  font-size: 0.75rem;
+}
+
+.folder-path-rect {
+  background: #0D1117;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  padding: 0.35rem; // Slightly more vertical padding than before
+  margin-bottom: 0.25rem;
+  gap: 0.5rem;
+}
+
+.folder-name {
+  color: #e6edf3;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.92rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.change-folder-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0.1rem 0.25rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  min-width: 24px;
+  min-height: 24px;
+}
+.change-folder-btn:hover {
+  background: #21262d;
+}
+
+.item-count-row {
+  color: #7d8590;
+  font-size: 0.8rem;
+  margin-top: 0.1rem;
+}

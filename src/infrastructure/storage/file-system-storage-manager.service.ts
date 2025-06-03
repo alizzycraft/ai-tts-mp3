@@ -182,22 +182,23 @@ export class FileSystemStorageManagerService {
 
       // If user cancels the picker, this is caught here
       if (error instanceof Error && error.name === 'AbortError') {
-        console.log('[FileSystemStorageManagerService] Directory picker was cancelled.');
+        console.log('[FileSystemStorageManagerService] Directory picker was cancelled. Leaving previous folder and storage mode untouched.');
+        // Do NOT clear file system state, just return
+        return { success: false, error: 'User cancelled folder selection' };
       } else {
         console.error('[FileSystemStorageManagerService] An unexpected error occurred during file system storage enablement:', error);
+        // Revert state if enablement failed
+        this.storageState.updateFileSystemState({
+          isEnabled: false,
+          directoryHandle: null,
+          selectedPath: null
+        });
+        await this.historyManagement.setHistory([]);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error during file system storage enablement'
+        };
       }
-
-      // Revert state if enablement failed
-      this.storageState.updateFileSystemState({
-        isEnabled: false,
-        directoryHandle: null,
-        selectedPath: null
-      });
-
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error during file system storage enablement'
-      };
     }
   }
 

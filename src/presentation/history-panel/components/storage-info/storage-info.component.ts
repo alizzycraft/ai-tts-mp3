@@ -1,4 +1,4 @@
-import { Component, input } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { StorageInfo } from '../../../../integration/history-storage.service';
 import { FormatFileSizePipe } from '../../../shared/pipes/format-file-size.pipe';
@@ -7,25 +7,13 @@ import { FormatFileSizePipe } from '../../../shared/pipes/format-file-size.pipe'
   selector: 'app-storage-info',
   standalone: true,
   imports: [CommonModule, FormatFileSizePipe],
-  template: `
-    <div class="storage-info" *ngIf="showStorageBar()">
-      <div class="storage-bar">
-        <div 
-          class="used-space" 
-          [class.warning]="warningLevel() === 'warning'"
-          [class.critical]="warningLevel() === 'critical'"
-          [style.width.%]="(storageInfo().usedPercentage) * 100">
-        </div>
-      </div>
-      <div class="storage-text">
-        {{ storageInfo().used | formatFileSize }} used
-        of {{ storageInfo().total | formatFileSize }}
-      </div>
-    </div>
-  `
+  templateUrl: './storage-info.component.html',
+  styleUrls: ['./storage-info.component.scss']
 })
 export class StorageInfoComponent {
-  storageInfo = input.required<StorageInfo>();
+  storageInfo = input.required<any>(); // Accepts isFileSystem, folderName, etc.
   showStorageBar = input.required<boolean>();
   warningLevel = input.required<'normal' | 'warning' | 'critical'>();
+  toggleFileSystem = output<void>();
+  changeFolder = output<void>();
 }

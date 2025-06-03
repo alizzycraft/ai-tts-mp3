@@ -126,13 +126,13 @@ import { ModalService } from '../../shared/modal.service';
           <div class="empty-state">
             <ng-container *ngIf="searchQuery(); else noSearch">
               <div class="empty-icon">
-                <img src="assets/icons/outline/search.svg" width="48" height="48" alt="Search">
+                <img src="assets/icons/outline/search.svg" width="48" height="48" alt="Search" style="filter: invert(55%) sepia(8%) saturate(872%) hue-rotate(169deg) brightness(96%) contrast(95%);">
               </div>
               <div class="empty-message">No items match your search</div>
             </ng-container>
             <ng-template #noSearch>
               <div class="empty-icon">
-                <img src="assets/icons/outline/calendar-time.svg" width="48" height="48" alt="Calendar">
+                <img src="assets/icons/outline/calendar-time.svg" width="48" height="48" alt="Calendar" style="filter: invert(55%) sepia(8%) saturate(872%) hue-rotate(169deg) brightness(96%) contrast(95%);">
               </div>
               <div class="empty-message">No TTS history yet</div>
               <div class="empty-hint">Generated speech will appear here</div>

@@ -1,0 +1,39 @@
+<!-- Local Storage Mode -->
+<div *ngIf="!storageInfo().isFileSystem" class="storage-info bordered-box">
+  <div class="storage-header">
+    <span class="storage-title">
+      Storage
+      <button class="storage-lock-btn clickable" [title]="'Enable unlimited file system storage'" (click)="toggleFileSystem.emit()">
+        <img src="assets/icons/outline/bookmark.svg" width="16" height="16" alt="Enable unlimited storage">
+      </button>
+    </span>
+  </div>
+  <div class="storage-bar">
+    <div class="storage-fill" [ngStyle]="{ width: (storageInfo().usedPercentage * 100) + '%' }"></div>
+  </div>
+  <div class="storage-text">
+    <span class="storage-percentage">{{ (storageInfo().usedPercentage * 100) | number:'1.0-0' }}%</span>
+    <span class="storage-details">{{ storageInfo().used | formatFileSize }} / 20 MB</span>
+  </div>
+</div>
+
+<!-- File System Storage Mode (only the styled version, with working buttons) -->
+<div *ngIf="storageInfo().isFileSystem" class="folder-storage-info bordered-box">
+  <div class="storage-header">
+    <span class="storage-title">
+      Unlimited Storage
+      <button class="storage-lock-btn clickable" [title]="'Disable unlimited file system storage'" (click)="toggleFileSystem.emit()">
+        <img src="assets/icons/outline/archive.svg" width="16" height="16" alt="Disable unlimited storage">
+      </button>
+    </span>
+  </div>
+  <div class="folder-path-rect">
+    <button class="change-folder-btn" (click)="changeFolder.emit()" title="Change folder">
+      <img src="assets/icons/outline/folder-down.svg" width="16" height="16" class="inline-icon" alt="Change folder">
+    </button>
+    <span class="folder-name">{{ storageInfo().folderName }}</span>
+  </div>
+  <div class="item-count-row">
+    <span class="item-count-text">{{ storageInfo().itemCount }} items stored</span>
+  </div>
+</div>

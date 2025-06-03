@@ -6,6 +6,7 @@ import { PlaybackService } from '../../../../integration/playback.service';
 import { FormatDatePipe } from '../../../shared/pipes/format-date.pipe';
 import { TruncateTextPipe } from '../../../shared/pipes/truncate-text.pipe';
 import { FormatFileSizePipe } from '../../../shared/pipes/format-file-size.pipe';
+import { FormatDurationPipe } from '../../../shared/pipes/format-duration.pipe';
 
 @Component({
   selector: 'app-history-list',
@@ -15,148 +16,11 @@ import { FormatFileSizePipe } from '../../../shared/pipes/format-file-size.pipe'
     FormsModule,
     FormatDatePipe,
     TruncateTextPipe,
-    FormatFileSizePipe
-  ],  template: `
-    <!-- History List Template -->
-    <div class="history-list">
-      @if (history().length > 0) {
-        <div class="clear-history">
-          <button 
-            class="clear-button"
-            (click)="onClearClick($event)"
-            aria-label="Clear all history">
-            Clear All
-          </button>
-        </div>
-      }
-      <div class="history-items">
-        @for (item of filteredHistory(); track item.id) {
-          <div 
-            class="history-item" 
-            [class.selected]="selectedItemId() === item.id"
-            (click)="onItemClick(item)"
-            role="button"
-            tabindex="0"
-            [attr.aria-selected]="selectedItemId() === item.id"
-            (keyup.enter)="onItemClick(item)"
-            (keyup.space)="onItemClick(item)">
-            <div class="item-content">
-              <div class="item-text">{{ item.text | truncateText:50 }}</div>
-              <div class="item-meta">
-                <span>{{ item.createdAt | formatDate }}</span>
-                <span>{{ item.audioSize | formatFileSize }}</span>
-              </div>
-            </div>
-            <div class="item-actions">
-              <button 
-                class="play-button"
-                (click)="onPlayPauseClick($event, item)"
-                [attr.aria-label]="isPlaying(item) ? 'Pause' : 'Play'">
-                {{ isPlaying(item) ? '⏸️' : '▶️' }}
-              </button>
-              <button 
-                class="download-button"
-                (click)="onDownloadClick($event, item)"
-                aria-label="Download">
-                ⬇️
-              </button>
-              <button 
-                class="delete-button"
-                (click)="onDeleteClick($event, item)"
-                aria-label="Delete">
-                🗑️
-              </button>
-            </div>
-          </div>
-        }
-      </div>
-    </div>
-  `,
-  styles: [`
-    .history-list {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      overflow: hidden;
-    }
-
-    .search-bar {
-      padding: 1rem;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    .history-items {
-      flex: 1;
-      overflow-y: auto;
-      padding: 1rem;
-    }
-
-    .history-item {
-      padding: 1rem;
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      margin-bottom: 1rem;
-      cursor: pointer;
-
-      &:hover {
-        background: var(--hover-bg);
-      }
-
-      &.selected {
-        border-color: var(--accent-color);
-        background: var(--selected-bg);
-      }
-    }
-
-    .item-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 0.5rem;
-    }
-
-    .item-title {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .provider-icon, .voice-icon {
-      width: 16px;
-      height: 16px;
-    }
-
-    .item-actions {
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    .item-metadata {
-      display: flex;
-      gap: 1rem;
-      font-size: 0.9em;
-      color: var(--text-muted);
-    }    .clear-history {
-      padding: 0.5rem;
-      margin-bottom: 0.5rem;
-      text-align: right;
-    }
-
-    .clear-button {
-      padding: 0.5rem 1rem;
-      background: transparent;
-      border: 1px solid var(--error-color);
-      color: var(--error-color);
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.85rem;
-      transition: all 0.2s ease;
-
-      &:hover {
-        background: rgba(218, 54, 51, 0.1);
-        transform: translateY(-1px);
-      }
-    }  `]
+    FormatFileSizePipe,
+    FormatDurationPipe
+  ],
+  templateUrl: './history-list.component.html',
+  styleUrls: ['./history-list.component.scss']
 })
 export class HistoryListComponent {
     // Dependency injection
@@ -204,5 +68,50 @@ export class HistoryListComponent {
   onClearClick(event: Event): void {
     event.stopPropagation();
     this.clearHistory.emit();
+  }
+
+  // Utility methods for icon and display mapping
+  getProviderIcon(provider: string): string {
+    switch ((provider || '').toLowerCase()) {
+      case 'openai': return 'robot';
+      case 'elevenlabs': return 'music';
+      case 'azure': return 'cloud';
+      case 'google': return 'search';
+      case 'aws': return 'package';
+      default: return 'microphone';
+    }
+  }
+
+  getVoiceIcon(voice: string): string {
+    // For OpenAI voices, use actual icon names (only those available in assets)
+    const openAIVoiceIcons: Record<string, string> = {
+      'alloy': 'ghost-3',
+      'echo': 'moon',
+      'fable': 'clover',
+      'onyx': 'carambola',
+      'nova': 'flower',
+      'shimmer': 'sunglasses',
+      // Fallbacks for new voices
+      'coral': 'ghost-3',
+      'ash': 'ghost-3',
+      'sage': 'ghost-3',
+      'rachel': 'ghost-3',
+      'drew': 'moon',
+      'clyde': 'clover'
+    };
+    return openAIVoiceIcons[(voice || '').toLowerCase()] || 'microphone';
+  }
+
+  getVoiceDisplayText(voice: string, provider: string): string {
+    // For Azure, AWS, and Google voices, extract language code or return voice name
+    if (["azure", "aws", "google"].includes((provider || '').toLowerCase())) {
+      const langMatch = (voice || '').match(/^([a-z]{2}-[A-Z]{2})/);
+      if (langMatch) {
+        return langMatch[1];
+      }
+      const parts = (voice || '').split('-');
+      return parts.length > 1 ? parts[0].toUpperCase() : (voice || '').substring(0, 3).toUpperCase();
+    }
+    return voice;
   }
 }

@@ -75,6 +75,11 @@ export class HistoryPanelComponent {
   showStorageBar = computed(() => {
     return !this.fileSystemState().isEnabled;
   });
+  storageInfoForDisplay = computed(() => ({
+    ...this.storageInfo(),
+    isFileSystem: this.fileSystemState().isEnabled,
+    folderName: this.fileSystemState().selectedPath
+  }));
 
   // Modal response handling - purely signal-based
   private modalResponseHandler = computed(() => {

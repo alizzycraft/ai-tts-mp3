@@ -40,7 +40,7 @@ import { HistoryListComponent } from '../history-list/history-list.component';
   `,
   styles: [`
     .history-list-area { display: flex; flex-direction: column; height: 100%; }
-    .search-bar { display: flex; align-items: center; padding: 1rem; border-bottom: 1px solid #21262d; background: #161b22; }
+    .search-bar { display: flex; align-items: center; padding: 1rem; border-bottom: 1px solid #21262d; background: #161b22; font-size: 0.9rem; }
     .search-input { flex: 1; padding: 0.5rem; background: #0d1117; border: 1px solid #21262d; border-radius: 6px; color: #e6edf3; }
     .clear-search-btn, .clear-all-btn { margin-left: 0.5rem; background: none; border: none; color: #7d8590; cursor: pointer; border-radius: 4px; transition: all 0.2s; }
     .clear-all-btn { display: flex; align-items: center; gap: 0.25rem; color: #e6edf3; background: #21262d; border: 1px solid #30363d; padding: 0.5rem; border-radius: 6px; }
