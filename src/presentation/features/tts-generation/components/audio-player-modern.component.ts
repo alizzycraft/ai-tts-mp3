@@ -80,14 +80,13 @@ export class AudioPlayerModernComponent implements OnDestroy {
 
   // Helper method to load audio for a result
   private checkAndLoadAudio(result: TTSResult): void {
-    if (!this.isLoadingSignal() && result.audioData) {
-      this.isLoadingSignal.set(true);
+    if (!this.isLoadingSignal() && result.audioData) {      this.isLoadingSignal.set(true);
       
-      // Create a new audio context and buffer
+      // Create a new audio context and decode buffer
       const audioContext = new AudioContext();
       audioContext.decodeAudioData(result.audioData.buffer)
-        .then(buffer => {
-          // Now we have a decoded audio buffer
+        .then(() => {
+          // Successfully decoded audio buffer
           this.isLoadingSignal.set(false);
         })
         .catch(error => {

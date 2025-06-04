@@ -1,19 +1,11 @@
 // Storage State Management Service - Manages storage state and configuration
 import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { ModalService } from '../../shared/modal.service';
+import { FileSystemStorageState, FolderReconnectionPrompt } from '../domain-types';
+import { signal, computed } from '@angular/core';
 
-export interface FileSystemStorageState {
-  isSupported: boolean;
-  isEnabled: boolean;
-  directoryHandle: FileSystemDirectoryHandle | null;
-  selectedPath: string | null;
-}
-
-export interface FolderReconnectionPrompt {
-  previousPath: string;
-  shouldPrompt: boolean;
-}
+export type { FileSystemStorageState, FolderReconnectionPrompt };
 
 @Injectable({
   providedIn: 'root'
@@ -23,17 +15,26 @@ export class StorageStateService {
   private readonly STORAGE_STATE_KEY = 'tts-storage-state';
   private initialized = false;
 
-  private fileSystemStateSubject = new BehaviorSubject<FileSystemStorageState>({
+  // Replace BehaviorSubjects with signals
+  private readonly _fileSystemState = signal<FileSystemStorageState>({
     isSupported: false,
     isEnabled: false,
-    directoryHandle: null,
-    selectedPath: null
+    selectedPath: null,
+    directoryHandle: null
   });
 
-  private folderReconnectionSubject = new BehaviorSubject<FolderReconnectionPrompt | null>(null);
+  private readonly _folderReconnectionPrompt = signal<FolderReconnectionPrompt | null>(null);
 
+  // Add error state signal
+  private readonly _stateError = signal<string | null>(null);
+
+  // Public readonly signals
+  readonly fileSystemState = computed(() => this._fileSystemState());
+  readonly folderReconnectionPrompt = computed(() => this._folderReconnectionPrompt());
+  readonly stateError = computed(() => this._stateError());
   constructor(
-    @Inject(PLATFORM_ID) private platformId: object
+    @Inject(PLATFORM_ID) private platformId: object,
+    private modalService: ModalService
   ) {}
 
   /** true only when running in a browser (not during SSR) */
@@ -52,108 +53,159 @@ export class StorageStateService {
     console.debug('[StorageState] Initializing storage state, filesystem support:', isSupported);
 
     if (this.isBrowser) {
-      this.fileSystemStateSubject.next({
-        isSupported,
-        isEnabled: false,
-        directoryHandle: null,
-        selectedPath: null
-      });
+      // First load any saved state
+      this.loadStorageState();
+      
+      // Then initialize with filesystem support if no existing state
+      const currentState = this._fileSystemState();
+      if (!currentState.isEnabled) {
+        this._fileSystemState.set({
+          ...currentState,
+          isSupported,
+          isEnabled: false,
+          directoryHandle: null,
+          selectedPath: null
+        });
+      }
     }
-  }
-
-  // File system state observable
-  get fileSystemState$(): Observable<FileSystemStorageState> {
-    return this.fileSystemStateSubject.asObservable();
-  }
-
-  // Get current file system state
-  getFileSystemState(): FileSystemStorageState {
-    return this.fileSystemStateSubject.value;
   }
 
   // Update file system state
   updateFileSystemState(updates: Partial<FileSystemStorageState>): void {
     if (!this.isBrowser) return;
 
-    const current = this.fileSystemStateSubject.value;
-    const updated = { ...current, ...updates };
-    this.fileSystemStateSubject.next(updated);
-    this.saveStorageState();
+    // Merge updates with current state atomically
+    this._fileSystemState.update(current => {
+      const newState = { ...current, ...updates };
+      // Save state immediately on significant changes
+      if (updates.isEnabled !== undefined || updates.selectedPath !== undefined) {
+        this.saveFolderState();
+        this.saveStorageState();
+      }
+      return newState;
+    });
   }
 
-  // Set folder reconnection prompt
+  // Set the reconnection prompt and show modal if needed
   setFolderReconnectionPrompt(prompt: FolderReconnectionPrompt | null): void {
     console.debug('[StorageState] Setting folder reconnection prompt:', prompt);
-    this.folderReconnectionSubject.next(prompt);
-  }
+    this._folderReconnectionPrompt.set(prompt);
+    
+    if (prompt?.shouldPrompt) {
+      console.debug('[StorageState] Prompt activated, showing modal');
+      this.modalService.showComponent({
+        type: 'component',
+        componentType: 'ReconnectionPromptModal',
+        data: prompt,
+        allowDismiss: false
+      });
+    }
 
-  // Clear folder reconnection prompt
+    // Verify the update
+    const currentPrompt = this._folderReconnectionPrompt();
+    console.debug('[StorageState] Current prompt state after update:', currentPrompt);
+    
+    if (prompt && (!currentPrompt || !currentPrompt.shouldPrompt)) {
+      console.warn('[StorageState] Prompt not set correctly:', { 
+        attempted: prompt, 
+        current: currentPrompt 
+      });
+    }
+  }
   clearFolderReconnectionPrompt(): void {
     console.debug('[StorageState] Clearing folder reconnection prompt');
-    this.folderReconnectionSubject.next(null);
+    this.setFolderReconnectionPrompt(null);
   }
 
-  // Observables
-  get folderReconnectionPrompt$(): Observable<FolderReconnectionPrompt | null> {
-    return this.folderReconnectionSubject.asObservable();
+  // Add method to force prompt check
+  verifyPromptState(): void {
+    const state = this._fileSystemState();
+    const prompt = this._folderReconnectionPrompt();
+    console.debug('[StorageState] Current prompt and state:', {
+      state: {
+        isEnabled: state.isEnabled,
+        selectedPath: state.selectedPath
+      },
+      prompt
+    });
   }
 
   // Current state getters
   getState(): FileSystemStorageState {
-    return this.fileSystemStateSubject.value;
-  }
-
-  // Load storage state from localStorage
-  async loadStorageState(): Promise<void> {
+    return this._fileSystemState();
+  }  // Convert to synchronous operation
+  loadStorageState(): void {
     if (!this.isBrowser || typeof localStorage === 'undefined') return;
 
     try {
-      console.log(`[StorageState] Attempting to load storage state from localStorage key: ${this.STORAGE_STATE_KEY}`);
+      console.debug('[StorageState] Loading storage state');
+      
+      // Load storage state
       const stored = localStorage.getItem(this.STORAGE_STATE_KEY);
       if (stored) {
         const savedState = JSON.parse(stored);
-        console.log('[StorageState] Loaded raw state from localStorage:', stored);
-        console.log('[StorageState] Parsed state:', savedState);
-        if (savedState && typeof savedState === 'object' && 'isEnabled' in savedState && savedState.isEnabled) {
-           console.log('[StorageState] Loaded state indicates file system storage was enabled.');
-          const currentState = this.fileSystemStateSubject.value;
-          this.fileSystemStateSubject.next({
+        if (savedState && typeof savedState === 'object' && 'isEnabled' in savedState) {
+          const currentState = this._fileSystemState();
+          
+          // Don't set isEnabled true if we're loading from storage,
+          // since we need to reconnect first
+          this._fileSystemState.set({
             ...currentState,
-            isEnabled: true,
-            selectedPath: savedState.selectedPath || null // Ensure selectedPath is included if available
+            isEnabled: false, // Force disabled until reconnected
+            selectedPath: savedState.selectedPath || null
           });
-        } else {
-           console.log('[StorageState] Loaded state indicates file system storage was NOT enabled or format is unexpected.', savedState);
+          this._stateError.set(null);
+
+          // If we had a previously enabled state with a path, set up reconnection
+          if (savedState.isEnabled && savedState.selectedPath) {
+            console.debug('[StorageState] Setting up reconnection for path:', savedState.selectedPath);
+            this.setFolderReconnectionPrompt({
+              previousPath: savedState.selectedPath,
+              shouldPrompt: true
+            });
+          }
         }
       }
+      
+      // Verify prompt state after loading
+      this.verifyPromptState();
     } catch (error) {
-      console.error('[StorageState] Failed to load storage state from localStorage:', error);
+      const errorMsg = '[StorageState] Failed to load storage state';
+      console.error(errorMsg, error);
+      this._stateError.set(errorMsg);
     }
   }
 
-  // Save storage state to localStorage
-  async saveStorageState(): Promise<void> {
+  // Convert to synchronous operation
+  saveStorageState(): void {
     if (!this.isBrowser || typeof localStorage === 'undefined') return;
-
-    const state = this.getFileSystemState();
-     const stateToSave = {
-      isEnabled: state.isEnabled,
-      selectedPath: state.selectedPath
-    };
-    console.log(`[StorageState] Attempting to save storage state to localStorage key: ${this.STORAGE_STATE_KEY}`, stateToSave);
 
     try {
+      const state = this.getState();
+      const stateToSave = {
+        isEnabled: state.isEnabled,
+        selectedPath: state.selectedPath
+      };
       localStorage.setItem(this.STORAGE_STATE_KEY, JSON.stringify(stateToSave));
-      console.log('[StorageState] Storage state saved successfully.');
+      this._stateError.set(null);
     } catch (error) {
-      console.error('[StorageState] Failed to save storage state to localStorage:', error);
+      const errorMsg = '[StorageState] Failed to save storage state';
+      console.error(errorMsg, error);
+      this._stateError.set(errorMsg);
     }
   }
 
-  // Clear storage state from localStorage
-  async clearStorageState(): Promise<void> {
+  // Convert to synchronous operation
+  clearStorageState(): void {
     if (!this.isBrowser || typeof localStorage === 'undefined') return;
-    localStorage.removeItem(this.STORAGE_STATE_KEY);
+    try {
+      localStorage.removeItem(this.STORAGE_STATE_KEY);
+      this._stateError.set(null);
+    } catch (error) {
+      const errorMsg = '[StorageState] Failed to clear storage state';
+      console.error(errorMsg, error);
+      this._stateError.set(errorMsg);
+    }
   }
 
   // Get previous folder state from localStorage
@@ -179,7 +231,7 @@ export class StorageStateService {
     if (!this.isBrowser || typeof localStorage === 'undefined') return;
 
     try {
-      const state = this.fileSystemStateSubject.value;
+      const state = this._fileSystemState();
       if (state.isEnabled && state.selectedPath) {
         localStorage.setItem(this.FOLDER_STATE_KEY, JSON.stringify({ 
           selectedPath: state.selectedPath 

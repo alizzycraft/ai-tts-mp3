@@ -53,6 +53,39 @@ module.exports = tseslint.config(
           style: "kebab-case",
         },
       ],
+
+      // Reactive pattern rules
+      "no-restricted-syntax": [
+        "error",
+        {
+          "selector": "CallExpression[callee.name='computed'] CallExpression[callee.property.name=/^(subscribe|observe|then)$/]",
+          "message": "Avoid using non-reactive patterns inside computed signals."
+        }
+      ],
+      
+      "no-restricted-imports": ["error", {
+        "paths": [
+          {
+            "name": "@angular/core",
+            "importNames": ["effect"],
+            "message": "Use computed signals instead of effects for reactivity"
+          }
+        ]
+      }],
+
+      "@typescript-eslint/naming-convention": [
+        "error",
+        {
+          "selector": ["function", "method"],
+          "format": ["camelCase"],
+          "failureMessage": "Avoid non-reactive pattern names in signal-based code",
+          "filter": {
+            "regex": "^(effect|subscribe|observe|promise|async|Observable|setTimeout|runInInjectionContext|queueMicrotask)",
+            "match": false
+          }
+        }
+      ],
+      
       "import/no-restricted-paths": [
         "error",
         {

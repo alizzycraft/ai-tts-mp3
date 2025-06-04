@@ -1,6 +1,7 @@
 import { Component, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HistoryItem } from '../../../../integration/domain-types';
 import { HistoryListComponent } from '../history-list/history-list.component';
 
 @Component({
@@ -14,27 +15,29 @@ import { HistoryListComponent } from '../history-list/history-list.component';
         <input
           type="text"
           class="search-input"
-          placeholder="Search history..."
+          placeholder="Search history..."          
           [value]="searchQuery()"
           (input)="updateSearchQuery($event)"
         />
         <button *ngIf="searchQuery()" class="clear-search-btn" (click)="clearSearchQuery()" title="Clear search">
           <img src="assets/icons/outline/x.svg" width="14" height="14" alt="Clear search" />
         </button>
-        <button *ngIf="history().length > 0" class="clear-all-btn" (click)="clearAll.emit()" title="Clear all history">
+        <button *ngIf="history().length > 0" class="clear-all-btn" (click)="requestClearAll.emit()" title="Clear all history">
           <img src="assets/icons/outline/trash.svg" width="16" height="16" class="inline-icon" alt="Trash" />
           All
         </button>
       </div>
       <!-- History List -->
       <app-history-list
+        [searchQuery]="searchQuery()"
         [history]="filteredHistory()"
         [filteredHistory]="filteredHistory()"
         [selectedItemId]="selectedItemId()"
         (itemSelected)="selectItem.emit($event)"
-        (playPauseItem)="playItem.emit($event.item)"
-        (deleteItem)="deleteItem.emit($event.item)"
-        (clearHistory)="clearAll.emit()"
+        (playPauseItem)="onPlayPauseItem($event)"
+        (deleteItem)="onDeleteItem($event)"
+        (clearHistory)="requestClearAll.emit()"
+        (downloadItem)="onDownloadItem($event)"
       ></app-history-list>
     </div>
   `,
@@ -48,27 +51,41 @@ import { HistoryListComponent } from '../history-list/history-list.component';
   `]
 })
 export class HistoryListAreaComponent {
-  history = input.required<any[]>();
-  filteredHistory = input.required<any[]>();
-  searchQuery = input.required<string>();
+  // Input signals
+  history = input.required<HistoryItem[]>();
+  filteredHistory = input.required<HistoryItem[]>();
   selectedItemId = input.required<string | null>();
-  selectItem = output<any>();
-  playItem = output<any>();
-  deleteItem = output<any>();
-  clearAll = output<void>();
-  // Add an input for the setter function
-  searchQuerySetter = input<(value: string) => void>();
+  searchQuery = input.required<string>();
 
-  // Helper methods to update input signals (InputSignal<T> does not expose .set())
-  updateSearchQuery(event: Event) {
-    const value = (event.target as HTMLInputElement)?.value ?? '';
-    if (this.searchQuerySetter()) {
-      this.searchQuerySetter()!(value);
-    }
+  // Output emitters
+  selectItem = output<HistoryItem>();
+  playItem = output<HistoryItem>();
+  deleteItem = output<HistoryItem>();
+  requestClearAll = output<void>();
+  downloadItem = output<HistoryItem>();
+  searchQueryChange = output<string>();
+
+  // Event handlers
+  clearSearchQuery(): void {
+    this.searchQueryChange.emit('');
   }
-  clearSearchQuery() {
-    if (this.searchQuerySetter()) {
-      this.searchQuerySetter()!("");
-    }
+
+  updateSearchQuery(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.searchQueryChange.emit(input.value);
+  }
+  onPlayPauseItem(event: { item: HistoryItem; event: Event }): void {
+    event.event.stopPropagation(); // Stop event propagation to prevent bubbling
+    this.playItem.emit(event.item); // Emit play event with the history item
+  }
+
+  onDeleteItem(event: { item: HistoryItem; event: Event }): void {
+    event.event.stopPropagation(); // Stop event propagation 
+    this.deleteItem.emit(event.item);
+  }
+
+  onDownloadItem(event: { item: HistoryItem; event: Event }): void {
+    event.event.stopPropagation(); // Stop event propagation
+    this.downloadItem.emit(event.item);
   }
 }

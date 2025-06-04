@@ -44,33 +44,31 @@
 
   <!-- Storage Info Component -->
   <app-storage-info
-    [storageInfo]="storageInfoForDisplay()"
+    [storageInfo]="storageInfo()"
     [showStorageBar]="showStorageBar()"
     [warningLevel]="storageWarningLevel()"
     (toggleFileSystem)="onToggleStorage()"
     (changeFolder)="onChangeFolder()">
   </app-storage-info>
-
   <!-- File System Manager Component -->
   <app-file-system-manager
-    [state]="fileSystemState()"
+    [state]="fileSystem()"
     (toggleStorage)="onToggleStorage()"
     (changeFolder)="onChangeFolder()">
   </app-file-system-manager>
-
-  <!-- History List Area (search + list) -->
-  <app-history-list-area
-    [history]="history()"
+  <!-- History List Area (search + list) -->  <app-history-list-area
+    [history]="historyItems()"
     [filteredHistory]="filteredHistory()"
     [searchQuery]="searchQuery()"
-    [searchQuerySetter]="searchQuery.set.bind(searchQuery)"
     [selectedItemId]="selectedItemId()"
-    (selectItem)="selectItem($event)"
-    (playItem)="playItem.emit($event)"
-    (deleteItem)="deleteItem($event, $event)"
-    (clearAll)="onClearAllConfirm()"
-    style="display: flex; flex-direction: column; height: 100%;"
-    ></app-history-list-area>
+    (deleteItem)="deleteItem($event)"
+    (onDeleteConfirm)="onDeleteItemConfirm()"
+    (searchQueryChange)="onSearchQueryChange($event)"
+    (selectItem)="onItemSelect($event)"    (selectItem)="onItemSelect($event)"
+    (playItem)="onPlayItemClick($event)"
+    (downloadItem)="onDownloadItemClick($event)"
+    (clearHistory)="onClearAllConfirm()">
+  </app-history-list-area>
 
   <!-- Footer -->
   <div class="history-footer">
@@ -112,7 +110,7 @@
         </div>
         <div class="modal-footer">
           <button class="modal-btn secondary" (click)="cancelDeleteItem()">Cancel</button>
-          <button class="modal-btn danger" (click)="onDeleteConfirm()">Delete</button>
+          <button class="modal-btn danger" (click)="onDeleteItemConfirm()">Delete</button>
         </div>
       </div>
     </div>

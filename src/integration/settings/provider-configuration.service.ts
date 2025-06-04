@@ -1,10 +1,9 @@
 // Provider configuration management service
-import { Injectable } from '@angular/core';
+import { Injectable, signal, computed } from '@angular/core';
 import { LoggingService } from '../logging.service';
 import { Result } from '../../common/result';
 import { ModelProvider, TTSSettings } from '../../domain/tts.entity';
 import { TTSProviderFactory } from '../providers/tts-provider.factory';
-import { signal, computed } from '@angular/core';
 import { ApiKey } from '../../domain/value-objects/api-key';
 import { BrowserStorageService } from '../../infrastructure/storage/browser-storage.service';
 
@@ -256,9 +255,8 @@ export class ProviderConfigurationService {
       this.browserStorage.setItem(this.STORAGE_KEY, serialized);
       
       this.logging.info('Provider configuration saved (excluding sensitive data)', 'ProviderConfig', { provider: config.provider });
-      return Result.success(undefined);
-    } catch (error) {
-      this.logging.error('Failed to save provider configuration', error as Error, 'ProviderConfig');
+      return Result.success(undefined);    } catch (e) {
+      this.logging.error('Failed to save provider configuration', e as Error, 'ProviderConfig');
       return Result.failure('Failed to save provider configuration');
     }
   }  // ApiKey value object conversion helpers
@@ -270,7 +268,7 @@ export class ProviderConfigurationService {
     }
     try {
       return ApiKey.fromString(apiKeyStr);
-    } catch (error) {
+    } catch {
       this.logging.warn('Invalid API key format');
       return undefined;
     }

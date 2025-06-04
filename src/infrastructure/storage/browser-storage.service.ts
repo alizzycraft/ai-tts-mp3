@@ -7,7 +7,7 @@ import { isPlatformBrowser } from '@angular/common';
 export class BrowserStorageService {
   private isBrowser: boolean;
 
-  constructor(@Inject(PLATFORM_ID) platformId: Object) {
+  constructor(@Inject(PLATFORM_ID) platformId: object) {
     this.isBrowser = isPlatformBrowser(platformId);
   }
 

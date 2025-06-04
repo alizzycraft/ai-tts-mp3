@@ -136,10 +136,11 @@ export class DataSerializationService {
     };
   }  // Sanitize settings before saving (e.g., remove API keys)
   sanitizeSettings<T extends TTSSettings | ProviderConfiguration>(settings: T): T {
-    const sanitized = { ...settings };
-    delete (sanitized as any).apiKey;
+    const sanitized = { ...settings } as T & { apiKey?: unknown };
+    delete sanitized.apiKey;
     return sanitized;
-  }// Map loaded settings to the correct type/structure
+  }
+  // Map loaded settings to the correct type/structure
   mapLoadedSettings(settings: Record<string, unknown>): TTSSettings {
     // Perform mapping and type assertions as needed based on your loaded data structure
     const mappedSettings: TTSSettings = {

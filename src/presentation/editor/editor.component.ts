@@ -61,14 +61,14 @@ export class EditorComponent {  // Inject services
   // Token counting and cost estimation
   tokenCount = computed(() => {
     const text = this.inputText();
-    if (!text.trim()) return 0;
+    if (!text || typeof text !== 'string') return 0;
     // For TTS, we approximate tokens as character count / 4 (rough estimate)
     // but for display purposes, we'll use word count as it's more meaningful
     return text.trim().split(/\s+/).length;
   });
   estimatedCost = computed(() => {
     const text = this.inputText();
-    if (!text.trim()) return '~$0.00000 est.';
+    if (!text || typeof text !== 'string' || !text.trim()) return '~$0.00000 est.';
     const characterCount = text.length;
     const provider = this.settingsService.selectedProvider();
     
@@ -98,7 +98,8 @@ export class EditorComponent {  // Inject services
   }
 
   getCharCount(): number {
-    return this.inputText().length;
+    const text = this.inputText();
+    return typeof text === 'string' ? text.length : 0;
   }
 
   getLineNumbers(): number[] {

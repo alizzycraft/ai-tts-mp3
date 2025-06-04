@@ -1,9 +1,8 @@
-import { Component, inject, computed } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalService } from '../../../../../shared/modal.service';
-import { FolderReconnectionPrompt } from '../../../../../infrastructure/storage/storage-state.service';
-import { signal } from '@angular/core';
 import { IntegratedHistoryStorageService } from '../../../../../integration/history-storage.service';
+import { FolderReconnectionPrompt } from '../../../../../integration/domain-types';
 
 @Component({
   selector: 'app-reconnection-prompt-modal',
@@ -21,7 +20,7 @@ import { IntegratedHistoryStorageService } from '../../../../../integration/hist
         <p>You previously enabled unlimited storage using this folder:</p>
         <div class="folder-info">
           <img src="assets/icons/outline/folder-down.svg" width="20" height="20" class="inline-icon" alt="Folder">
-          <span class="folder-name">{{ prompt()?.previousPath }}</span>
+          <span class="folder-name">{{ promptData.previousPath }}</span>
         </div>
         <p>Would you like to reconnect to this folder to access your saved history?</p>
         <div *ngIf="error()" class="error-message">{{ error() }}</div>
@@ -75,14 +74,13 @@ import { IntegratedHistoryStorageService } from '../../../../../integration/hist
   `]
 })
 export class ReconnectionPromptModalComponent {
-  // State management - purely signal-based, reading from modal service
-  readonly prompt = computed(() => this.modalService.data() as FolderReconnectionPrompt | undefined);
+  private readonly modalService = inject(ModalService);
+  private readonly historyService = inject(IntegratedHistoryStorageService);
+
+  // State management
+  readonly promptData = this.modalService.data() as FolderReconnectionPrompt;
   readonly reconnecting = signal(false);
   readonly error = signal<string | null>(null);
-
-  // Services
-  private modalService = inject(ModalService);
-  private historyService = inject(IntegratedHistoryStorageService);
 
   // Called when user clicks "No, use local storage"
   async decline(): Promise<void> {
@@ -96,17 +94,16 @@ export class ReconnectionPromptModalComponent {
     this.reconnecting.set(true);
     this.error.set(null);
     try {
-      // Try to enable file system storage (will open picker)
       const result = await this.historyService.enableFileSystemStorage();
       if (result.success) {
         this.modalService.close(true);
       } else {
-        this.error.set(result.error || 'Failed to reconnect.');
-        this.reconnecting.set(false);
+        this.error.set(result.error || 'Failed to enable file system storage');
       }
-    } catch (e) {
-      // If user cancels, just reset state and keep modal open
-      this.error.set('Cancelled or failed to reconnect.');
+    } catch (err: unknown) {
+      console.error('Error during reconnection:', err);
+      this.error.set(err instanceof Error ? err.message : 'Unexpected error during reconnection');
+    } finally {
       this.reconnecting.set(false);
     }
   }

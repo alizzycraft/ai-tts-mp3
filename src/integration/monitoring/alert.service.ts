@@ -1,5 +1,5 @@
 // Alert service focused on system alerting and notifications
-import { Injectable, Inject, PLATFORM_ID, signal, computed, effect } from '@angular/core';
+import { Injectable, Inject, PLATFORM_ID, signal, computed } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { LoggingService } from '../logging.service';
 import { ApplicationMetrics } from './metrics-collection.service';
@@ -59,6 +59,18 @@ export class AlertService {
     };
   });
 
+  // Replace effect with computed signal
+  private readonly alertProcessor = computed(() => {
+    const alerts = this.alerts();
+    const acknowledged = this.acknowledgedAlerts();
+    
+    return {
+      activeCount: alerts.filter(a => !acknowledged.has(a.id)).length,
+      totalCount: alerts.length,
+      lastProcessed: new Date()
+    };
+  });
+
   constructor(
     @Inject(PLATFORM_ID) platformId: object,
     private logging: LoggingService
@@ -67,21 +79,8 @@ export class AlertService {
     this.initializeDefaultRules();
 
     if (this.isBrowser) {
-      // Effect to log critical alerts immediately
-      effect(() => {
-        const critical = this.criticalAlerts();
-        if (critical.length > 0) {
-          this.logging.critical(`${critical.length} critical alerts active`, undefined, 'Alerts');
-        }
-      });
-
-      // Effect to clean up old alerts
-      effect(() => {
-        const alerts = this.alerts();
-        if (alerts.length > this.MAX_ALERTS) {
-          this.alerts.update(current => current.slice(-this.MAX_ALERTS));
-        }
-      });
+      // Activate alert processor
+      this.alertProcessor();
     }
   }
 
@@ -335,5 +334,9 @@ export class AlertService {
 
   private generateAlertId(): string {
     return `alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+  private processAlerts(): void {
+    // Custom processing logic for alerts if needed
+    // This can be used to trigger side-effects or additional logging
   }
 }

@@ -4,6 +4,8 @@ import { provideClientHydration } from '@angular/platform-browser';
 import { provideHttpClient, withFetch } from '@angular/common/http';
 
 import { routes } from './app.routes';
+import { HISTORY_STORAGE_TOKEN } from '../tokens';
+import { IntegratedHistoryStorageService } from '../history-storage.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -11,6 +13,12 @@ export const appConfig: ApplicationConfig = {
     provideZonelessChangeDetection(),
     provideRouter(routes),
     provideClientHydration(),
-    provideHttpClient(withFetch())
+    provideHttpClient(withFetch()),
+
+    // History Storage provider
+    {
+      provide: HISTORY_STORAGE_TOKEN,
+      useClass: IntegratedHistoryStorageService
+    }
   ]
 };

@@ -1,26 +1,30 @@
 // Integration layer wrapper for history storage
-import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, Inject, PLATFORM_ID, Signal } from '@angular/core';
 import { 
   HistoryItem, 
   StorageInfo 
 } from '../infrastructure/storage/storage-types';
-// Import the new, focused storage services
 import { HistoryManagementService } from '../infrastructure/storage/history-management.service';
 import { FileSystemStorageManagerService } from '../infrastructure/storage/file-system-storage-manager.service';
 import { StorageStateService, FileSystemStorageState, FolderReconnectionPrompt } from '../infrastructure/storage/storage-state.service';
 import { StorageInfoService } from '../infrastructure/storage/storage-info.service';
-// import { FileSystemStorageService } from '../infrastructure/storage/file-system-storage.service'; // Removed as it's no longer used directly here
 import { TTSSettings, TTSResult } from '../domain/tts.entity';
 import { LoggingService } from './logging.service';
 import { MonitoringService } from './monitoring.service';
 import { isPlatformBrowser } from '@angular/common';
-import { Observable } from 'rxjs';
+import { IHistoryStorage } from './interfaces';
 
 @Injectable({
   providedIn: 'root'
 })
-export class IntegratedHistoryStorageService {
+export class IntegratedHistoryStorageService implements IHistoryStorage {
   private initialized = false;
+
+  // Expose signals as per IHistoryStorage interface
+  readonly items: Signal<HistoryItem[]>;
+  readonly storage: Signal<StorageInfo>;
+  readonly fileSystem: Signal<FileSystemStorageState>;
+  readonly reconnection: Signal<FolderReconnectionPrompt | null>;
 
   constructor(
     @Inject(PLATFORM_ID) private platformId: object,
@@ -28,135 +32,83 @@ export class IntegratedHistoryStorageService {
     private monitoring: MonitoringService,
     private historyManagement: HistoryManagementService,
     private fileSystemManager: FileSystemStorageManagerService,
-    private storageState: StorageStateService,
-    private storageInfo: StorageInfoService
+    private storageStateService: StorageStateService,
+    private storageInfoService: StorageInfoService
   ) {
+    // Initialize signals directly from services
+    this.items = this.historyManagement.history;
+    this.storage = this.storageInfoService.storageInfo;
+    this.fileSystem = this.storageStateService.fileSystemState;
+    this.reconnection = this.storageStateService.folderReconnectionPrompt;
+
     if (this.isBrowser) {
-      // Only initialize in browser context
-      this.initializeServices().catch(error => 
-        this.logging.error('Failed to initialize history storage', error as Error, 'History')
-      );
+      this.ensureInitialized().catch(error => 
+        this.logging.error('Failed to initialize history storage', error as Error));
     }
   }
 
-  private async initializeServices() {
-    if (this.initialized) {
-      this.logging.debug('History storage already initialized', 'History');
-      return;
-    }
-
-    this.initialized = true;
-    this.logging.info('Initializing history storage', 'History');
-
-    // Delegate initialization to FileSystemStorageManagerService and handle its response
-    const initResult = await this.fileSystemManager.initializeService();
-
-    if (!initResult.success) {
-      this.logging.warn('FileSystem storage initialization failed', 'History');
-      return;
-    }
-
-    if (initResult.waitingForUser) {
-      this.logging.debug('Waiting for user response to reconnection prompt', 'History');
-      return;
-    }
-
-    // Otherwise we've loaded successfully
-    this.logging.debug('History storage initialized successfully', 'History');
-  }
-
-  /** true only when running in a browser (not during SSR) */
   private get isBrowser(): boolean {
     return isPlatformBrowser(this.platformId);
   }
 
-  // Observables - Delegate to focused services
-  get history$(): Observable<HistoryItem[]> {
-    return this.historyManagement.history$;
-  }
+  private async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
 
-  get storageInfo$(): Observable<StorageInfo> {
-    return this.storageInfo.storageInfo$;
-  }
-
-  get fileSystemState$(): Observable<FileSystemStorageState> {
-    return this.storageState.fileSystemState$;
-  }
-
-  get folderReconnectionPrompt$(): Observable<FolderReconnectionPrompt | null> {
-    return this.storageState.folderReconnectionPrompt$;
-  }
-
-  // History operations - map to correct infrastructure method names
-  async getHistoryItems(): Promise<HistoryItem[]> {
-    return this.logging.trackPerformance(
-      'getHistoryItems',
-      async () => {
-        this.logging.debug('Retrieving history items', 'History');
-        // Delegate directly to HistoryManagementService
-        const items = this.historyManagement.getHistory();
-        this.logging.info(`Retrieved ${items.length} history items`, 'History');
-
-        return items;
-      },
-      'History'
-    );
-  }
-
-  async deleteHistoryItem(id: string): Promise<void> {
-    return this.logging.trackPerformance(
-      'deleteHistoryItem',
-      async () => {
-        this.logging.info('Deleting history item', 'History', { itemId: id });
-        // Delegate directly to HistoryManagementService
-        await this.historyManagement.removeFromHistory(id);
-        this.logging.info('History item deleted successfully', 'History', { itemId: id });
-        this.updateStorageMetrics();
-      },
-      'History'
-    );
-  }
-
-  // Method aliases for backward compatibility (delegate to infrastructure service)
-  async removeFromHistory(id: string): Promise<void> {
-    // Delegate directly to HistoryManagementService
-    await this.historyManagement.removeFromHistory(id);
-  }
-
-  async clearHistory(): Promise<boolean> {
-    // Delegate directly to HistoryManagementService
-    return await this.historyManagement.clearHistory();
-  }
-
-  async clearAllHistory(): Promise<boolean> {
-    // Delegate directly to HistoryManagementService
-    return await this.historyManagement.clearHistory();
-  }
-
-  getStorageInfo(): StorageInfo {
-    // Delegate directly to StorageInfoService
-    return this.storageInfo.getStorageInfo();
-  }
-
-  // File system operations - Delegate to infrastructure service
-  getFileSystemState(): FileSystemStorageState {
-    // Delegate directly to StorageStateService
-    return this.storageState.getFileSystemState();
+    try {
+      this.logging.debug('Initializing history storage services', 'History');
+      
+      // Initialize services in the right order
+      await this.fileSystemManager.initializeService();
+      await this.historyManagement.loadHistory();
+      
+      this.initialized = true;
+      this.logging.info('History storage services initialized', 'History');
+      
+    } catch (err) {
+      this.initialized = false;
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.logging.error('Failed to initialize history storage', error);
+      throw error;
+    }
   }
 
   async enableFileSystemStorage(): Promise<{ success: boolean; error?: string }> {
-    // Delegate directly to FileSystemStorageManagerService
-    return await this.fileSystemManager.enableFileSystemStorage();
+    try {
+      await this.ensureInitialized();
+      const result = await this.fileSystemManager.enableFileSystemStorage(false);
+      if (!result.success) {
+        return { success: false, error: result.error || 'Failed to enable file system storage' };
+      }
+      return { success: true };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : 'Unexpected error enabling file system storage';
+      return { success: false, error };
+    }
   }
 
-  async disableFileSystemStorage(): Promise<boolean> {
-    // Delegate directly to FileSystemStorageManagerService
-    return await this.fileSystemManager.disableFileSystemStorage();
+  async disableFileSystemStorage(): Promise<void> {
+    await this.ensureInitialized();
+    const result = await this.fileSystemManager.disableFileSystemStorage();
+    if (!result) {
+      throw new Error('Failed to disable file system storage');
+    }
+    // Reload history from local storage
+    await this.historyManagement.loadHistory();
   }
 
-  async handleFolderReconnection(reconnect: boolean): Promise<void> {
-    // Delegate user decision to FileSystemStorageManagerService
-    await this.fileSystemManager.handleFolderReconnection(reconnect);
+  async handleFolderReconnection(accepted: boolean): Promise<void> {
+    await this.ensureInitialized();
+    await this.fileSystemManager.handleFolderReconnection(accepted);
+  }
+
+  async deleteHistoryItem(id: string): Promise<void> {
+    await this.ensureInitialized();
+    await this.historyManagement.removeFromHistory(id);
+  }
+
+  async clearHistory(): Promise<void> {
+    await this.ensureInitialized();
+    await this.historyManagement.clearHistory();
   }
 
   // Additional history management methods - Delegate to infrastructure service
@@ -166,23 +118,34 @@ export class IntegratedHistoryStorageService {
     result: TTSResult,
     metadata?: { title?: string; tags?: string[]; duration?: number }
   ): Promise<{ success: boolean; warnings?: string[]; removed?: HistoryItem[] }> {
-    // Delegate directly to HistoryManagementService
+    await this.ensureInitialized();
     return await this.historyManagement.addToHistory(text, settings, result, metadata);
   }
 
   getItemsToBeRemoved(newItemSize: number): HistoryItem[] {
-    // Delegate directly to StorageInfoService
-    return this.storageInfo.getItemsToBeRemoved(this.historyManagement.getHistory(), newItemSize, this.storageState.getFileSystemState());
+    return this.storageInfoService.getItemsToBeRemoved(
+      this.items(), 
+      newItemSize,
+      this.fileSystem()
+    );
+  }
+
+  getStorageInfo(): StorageInfo {
+    return this.storage();
+  }
+
+  getFileSystemState(): FileSystemStorageState {
+    return this.fileSystem();
   }
 
   // Private utility methods
   private updateStorageMetrics(): void {
     try {
-      const storageInfo = this.getStorageInfo();
-      const used = storageInfo.used;
-      const available = storageInfo.available;
-      const total = storageInfo.total;
-      const percentageUsed = storageInfo.usedPercentage;
+      const info = this.storage();
+      const used = info.used;
+      const available = info.available;
+      const total = info.total;
+      const percentageUsed = info.usedPercentage;
       
       this.monitoring.updateStorageMetrics(used, available);
       this.logging.debug('Storage metrics updated', 'History', { 
@@ -190,7 +153,7 @@ export class IntegratedHistoryStorageService {
         available, 
         total,
         percentageUsed: percentageUsed * 100, // Convert to percentage for display
-        itemCount: storageInfo.itemCount
+        itemCount: info.itemCount
       });
     } catch (error) {
       this.logging.warn('Failed to update storage metrics', 'History', { 
@@ -199,7 +162,7 @@ export class IntegratedHistoryStorageService {
     }
   }
 
-  // Enhanced history operations with monitoring - Delegate to infrastructure service and add monitoring
+  // Enhanced history operations with monitoring
   async addToHistoryWithMonitoring(
     text: string,
     settings: TTSSettings,
@@ -215,8 +178,7 @@ export class IntegratedHistoryStorageService {
           hasMetadata: !!metadata 
         });
 
-        // Delegate directly to HistoryManagementService
-        const historyResult = await this.historyManagement.addToHistory(text, settings, result, metadata);
+        const historyResult = await this.addToHistory(text, settings, result, metadata);
         
         if (historyResult.success) {
           this.logging.info('Item added to history successfully', 'History', {

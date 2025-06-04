@@ -1,4 +1,5 @@
-import { Injectable, OnDestroy } from '@angular/core';
+import { Injectable, OnDestroy, Inject, PLATFORM_ID } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { TTSResult } from '../domain/tts.entity';
 import { HistoryItem } from './history-storage.service';
 import { PlaybackService as InfraPlaybackService } from '../infrastructure/audio/playback.service';
@@ -14,7 +15,10 @@ export class PlaybackService implements OnDestroy {
   readonly totalDuration;
   readonly hasEnded;
 
-  constructor(private playbackService: InfraPlaybackService) {
+  constructor(
+    private playbackService: InfraPlaybackService,
+    @Inject(PLATFORM_ID) private platformId: object
+  ) {
     this.playingItemId = this.playbackService.playingItemId;
     this.isPlaying = this.playbackService.isPlaying;
     this.currentTime = this.playbackService.currentTime;
@@ -42,8 +46,26 @@ export class PlaybackService implements OnDestroy {
     this.playbackService.stop(cleanup);
   }
 
-  togglePlayPause(itemOrResult?: HistoryItem | TTSResult | null, itemId?: string): Promise<void> {
-    return this.playbackService.togglePlayPause(itemOrResult, itemId);
+  async togglePlayPause(itemOrResult?: HistoryItem | TTSResult | null, itemId?: string): Promise<void> {
+    let result: TTSResult | null = null;
+    let currentItemId = itemId;
+
+    // Extract the result and ID from the input
+    if (itemOrResult && 'result' in itemOrResult) {
+      result = itemOrResult.result;
+      currentItemId = itemOrResult.id;
+    } else if (itemOrResult && 'queryId' in itemOrResult) {
+      result = itemOrResult;
+      currentItemId = itemId || result.queryId?.getValue();
+    }
+
+    // If no platform support, exit early
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+
+    // Delegate to infrastructure service
+    return this.playbackService.togglePlayPause(itemOrResult, currentItemId);
   }
 
   seek(timeInSeconds: number): Promise<void> {

@@ -1,64 +1,74 @@
 <!-- Editor Component Template -->
-<div class="editor-card">
+<div class="editor-card" role="region" aria-label="Text to Speech Editor">
   <!-- Title Input Row with Toggle -->
   <div class="input-row">
-    <div class="input-with-toggle">
+    <div class="input-with-toggle" role="group" aria-labelledby="title-label">
+      <label id="title-label" class="sr-only" for="history-title">Title for history</label>
       <input 
+        id="history-title"
         type="text" 
         [value]="settingsService.historyTitle()" 
         (input)="onTitleChange($event)"
         placeholder="Title for history (optional)"
         class="input title-input"
-        [class.disabled]="!settingsService.saveToHistory()">
+        [class.disabled]="!settingsService.saveToHistory()"
+        [attr.aria-disabled]="!settingsService.saveToHistory()">
       
       <div class="toggle-container">
-        <label class="toggle">
+        <label class="toggle" for="save-to-history">
           <input 
+            id="save-to-history"
             type="checkbox" 
             [checked]="settingsService.saveToHistory()" 
-            (change)="onSaveToHistoryChange($event)">
-          <span class="toggle-track">
+            (change)="onSaveToHistoryChange($event)"
+            aria-label="Save to History">
+          <span class="toggle-track" aria-hidden="true">
             <span class="toggle-thumb">
-              @if (settingsService.saveToHistory()) {
-              <img src="assets/icons/filled/toggle-right.svg" width="24" height="24" alt="Enabled">
+              @if (settingsService.saveToHistory()) {              <img src="assets/icons/filled/toggle-right.svg" width="24" height="24" alt="Save to history enabled">
               } @else {
-              <img src="assets/icons/filled/toggle-left.svg" width="24" height="24" alt="Disabled">
+              <img src="assets/icons/filled/toggle-left.svg" width="24" height="24" alt="Save to history disabled">
               }
             </span>
           </span>
         </label>
-        <span class="toggle-text">Save to History</span>
+        <span class="toggle-text" id="save-to-history-label">Save to History</span>
       </div>
     </div>
   </div>
 
   <!-- Code Editor Style Text Input -->
-  <div class="editor-container">
+  <div class="editor-container" role="region" aria-label="Text Editor">
     <div class="editor-header">
       <span class="editor-title">
-        <img src="assets/icons/outline/file-text.svg" width="16" height="16" class="inline-icon" alt="File">
+        <img src="assets/icons/outline/file-text.svg" width="16" height="16" class="inline-icon" alt="Text document icon">
         text-to-speech.txt
       </span>
-      <span class="editor-info">{{ getLineCount() }} lines | {{ getCharCount() }} chars | {{ tokenCount() }} tks | {{ estimatedCost() }}</span>
+      <span class="editor-info" role="status" aria-live="polite">
+        {{ getLineCount() }} lines | {{ getCharCount() }} chars | {{ tokenCount() }} tokens | {{ estimatedCost() }}
+      </span>
     </div>
     <div class="editor-wrapper">
-      <div class="line-numbers">
+      <div class="line-numbers" aria-hidden="true">
         @for (line of getLineNumbers(); track $index) {
         <div class="line-number">{{ line }}</div>
         }
-      </div>      <textarea 
+      </div>
+      <label for="input-text" class="sr-only">Text to convert to speech</label>
+      <textarea 
+        id="input-text"
         [value]="inputText()"
         (input)="onTextChange($event)"
         placeholder="Enter text to convert to speech..." 
         class="editor-textarea" 
         [disabled]="isProcessing()"
+        [attr.aria-disabled]="isProcessing()"
         spellcheck="false"></textarea>
     </div>
   </div>
   
   <!-- Bottom Section with Status Messages and Generate Button -->
   <div class="editor-bottom">
-    <div class="status-section">
+    <div class="status-section" role="status" aria-live="polite">
       <!-- Status Messages -->
       @if (statusMessage()) {
       <div class="status" [class]="currentResult()?.status">
@@ -66,7 +76,7 @@
       </div>
       }
       @if (errorMessage()) {
-      <div class="error">{{ errorMessage() }}</div>
+      <div class="error" role="alert">{{ errorMessage() }}</div>
       }
     </div>
     
@@ -75,12 +85,14 @@
       <button 
         class="generate-btn" 
         [disabled]="!canGenerate()"
-        (click)="onGenerateSpeech()">
+        (click)="onGenerateSpeech()"
+        [attr.aria-busy]="isProcessing()"
+        [attr.aria-disabled]="!canGenerate()">
         @if (isProcessing()) {
-          <span class="spinner"></span>
+          <span class="spinner" aria-hidden="true"></span>
           Generating...
         } @else {
-          <img src="assets/icons/outline/microphone.svg" width="16" height="16" class="inline-icon" alt="Generate">
+          <img src="assets/icons/outline/microphone.svg" width="16" height="16" class="inline-icon" alt="Microphone icon">
           Generate Speech
         }
       </button>

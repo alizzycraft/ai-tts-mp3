@@ -1,7 +1,7 @@
 // Storage Info Service - Calculates and manages storage usage statistics
 import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { signal, computed } from '@angular/core';
 import { HistoryItem, StorageInfo } from './storage-types';
 import { FileSystemStorageState } from './storage-state.service';
 
@@ -13,13 +13,17 @@ export class StorageInfoService {
   private lastUpdateTime = 0;
   private readonly UPDATE_THRESHOLD_MS = 100; // Minimum time between updates
 
-  private storageInfoSubject = new BehaviorSubject<StorageInfo>({
+  // Replace BehaviorSubject with signal
+  private readonly _storageInfo = signal<StorageInfo>({
     used: 0,
     available: 0,
     total: 0,
     usedPercentage: 0,
     itemCount: 0
   });
+
+  // Public readonly signal
+  readonly storageInfo = computed(() => this._storageInfo());
 
   constructor(@Inject(PLATFORM_ID) private platformId: object) {}
 
@@ -28,14 +32,9 @@ export class StorageInfoService {
     return isPlatformBrowser(this.platformId);
   }
 
-  // Observable
-  get storageInfo$(): Observable<StorageInfo> {
-    return this.storageInfoSubject.asObservable();
-  }
-
   // Current state getter
   getStorageInfo(): StorageInfo {
-    return this.storageInfoSubject.value;
+    return this._storageInfo();
   }
 
   // Calculate and update storage info
@@ -51,12 +50,12 @@ export class StorageInfoService {
     this.lastUpdateTime = now;
 
     const storageInfo = this.calculateStorageInfo(history, fileSystemState);
-    const current = this.storageInfoSubject.value;
+    const current = this._storageInfo();
 
     // Only update if there are actual changes
     if (this.hasStorageInfoChanged(current, storageInfo)) {
       console.debug('[StorageInfo] Updating storage info:', storageInfo);
-      this.storageInfoSubject.next(storageInfo);
+      this._storageInfo.update(() => storageInfo);
     }
   }
 
@@ -121,13 +120,13 @@ export class StorageInfoService {
 
   // Check if storage is near full (> 80% but <= 90%)
   isStorageNearFull(): boolean {
-    const info = this.storageInfoSubject.value;
+    const info = this._storageInfo();
     return info.usedPercentage > 0.8 && info.usedPercentage <= 0.9;
   }
 
   // Check if storage is critical (> 90%)
   isStorageCritical(): boolean {
-    const info = this.storageInfoSubject.value;
+    const info = this._storageInfo();
     return info.usedPercentage > 0.9;
   }
 
@@ -137,7 +136,7 @@ export class StorageInfoService {
     newItemSize: number,
     fileSystemState: FileSystemStorageState
   ): HistoryItem[] {
-    const storageInfo = this.storageInfoSubject.value;
+    const storageInfo = this._storageInfo();
     const itemsToRemove: HistoryItem[] = [];
     let currentSize = storageInfo.used;
     const totalLimit = fileSystemState.isEnabled 

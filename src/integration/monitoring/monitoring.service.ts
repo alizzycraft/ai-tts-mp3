@@ -77,51 +77,8 @@ export class MonitoringService {
         this.lastMonitoringRun.set(new Date());
       }, this.monitoringInterval());
     }
-  }
-
-  private checkMetricsAndTriggerAlerts(metrics: ApplicationMetrics): void {
-    // Set up alert rules based on metrics
-    const alertRules = [
-      {
-        id: 'storage-critical',
-        name: 'Storage Critical',
-        condition: (m: ApplicationMetrics) => m.storage.percentageUsed > 90,
-        severity: 'critical' as const,
-        message: 'Storage critically low',
-        enabled: true,
-        cooldownMinutes: 60
-      },
-      {
-        id: 'storage-warning',
-        name: 'Storage Warning',
-        condition: (m: ApplicationMetrics) => m.storage.percentageUsed > 80,
-        severity: 'warning' as const,
-        message: 'Storage usage high',
-        enabled: true,
-        cooldownMinutes: 120
-      },
-      {
-        id: 'error-rate',
-        name: 'High Error Rate',
-        condition: (m: ApplicationMetrics) => 
-          m.requests.total > 0 && (m.requests.failed / m.requests.total) * 100 > 10,
-        severity: 'warning' as const,
-        message: 'High error rate detected',
-        enabled: true,
-        cooldownMinutes: 30
-      },
-      {
-        id: 'response-time',
-        name: 'Slow Response Times',
-        condition: (m: ApplicationMetrics) => m.requests.averageResponseTime > 5000,
-        severity: 'warning' as const,
-        message: 'Slow response times detected',
-        enabled: true,
-        cooldownMinutes: 30
-      }
-    ];
-
-    // Check each rule and trigger alerts if needed
+  }  private checkMetricsAndTriggerAlerts(metrics: ApplicationMetrics): void {
+    // Delegate alerts checking to the alert service
     this.alertService.checkAlerts(metrics);
   }
 

@@ -1,7 +1,6 @@
 // History management service - handles CRUD operations for history items
-import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, Inject, PLATFORM_ID, signal, computed } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { BehaviorSubject, Observable } from 'rxjs';
 import { HistoryItem } from './storage-types';
 import { TTSResult, TTSSettings } from '../../domain/tts.entity';
 import { DataSerializationService } from './data-serialization.service';
@@ -15,7 +14,12 @@ import { StorageMigrationService } from './storage-migration.service';
 })
 export class HistoryManagementService {
   private readonly METADATA_FILE = 'history-metadata.json';
-  private historySubject = new BehaviorSubject<HistoryItem[]>([]);
+  
+  // Replace BehaviorSubject with signal
+  private readonly _history = signal<HistoryItem[]>([]);
+  
+  // Public readonly computed signal
+  readonly history = computed(() => this._history());
 
   constructor(
     @Inject(PLATFORM_ID) private platformId: object,
@@ -31,14 +35,9 @@ export class HistoryManagementService {
     return isPlatformBrowser(this.platformId);
   }
 
-  // Observables
-  get history$(): Observable<HistoryItem[]> {
-    return this.historySubject.asObservable();
-  }
-
   // Current state getters
   getHistory(): HistoryItem[] {
-    return this.historySubject.value;
+    return this._history();
   }
 
   /**
@@ -46,12 +45,12 @@ export class HistoryManagementService {
    */
   async loadHistory(): Promise<void> {
     if (!this.isBrowser) {
-      this.historySubject.next([]);
+      this._history.set([]);
       this.updateStorageInfo();
       return;
     }
 
-    const state = this.storageState.getFileSystemState();
+    const state = this.storageState.fileSystemState();
     console.log('[HistoryManagementService] loadHistory called with state:', {
       isEnabled: state.isEnabled,
       hasDirectoryHandle: !!state.directoryHandle
@@ -70,8 +69,8 @@ export class HistoryManagementService {
       console.log(`[HistoryManagementService] Loaded ${history.length} items from localStorage`);
     }
 
-    // Update observable with loaded history
-    this.historySubject.next(history);
+    // Update signal with loaded history
+    this._history.set(history);
     this.updateStorageInfo();
   }
 
@@ -84,9 +83,9 @@ export class HistoryManagementService {
     result: TTSResult,
     metadata?: { title?: string; tags?: string[]; duration?: number }
   ): Promise<{ success: boolean; warnings?: string[]; removed?: HistoryItem[] }> {
-    // Ensure history array is immutable when manipulating it
-    let currentHistory = [...this.historySubject.value];
-    const fileSystemState = this.storageState.getFileSystemState();
+    // Use current signal value
+    let currentHistory = [...this._history()];
+    const fileSystemState = this.storageState.fileSystemState();
     let removedItems: HistoryItem[] = [];
     const warnings: string[] = [];
 
@@ -113,8 +112,8 @@ export class HistoryManagementService {
     // Add the new item to the history (at the beginning for newest first)
     currentHistory.unshift(newItem);
 
-    // Update the observable and save history
-    this.historySubject.next(currentHistory);
+    // Update the signal and save history
+    this._history.set(currentHistory);
     await this.saveHistory(currentHistory);
     this.updateStorageInfo();
 
@@ -126,7 +125,7 @@ export class HistoryManagementService {
    * Remove item from history
    */
   async removeFromHistory(itemId: string): Promise<boolean> {
-    const currentHistory = this.historySubject.value;
+    const currentHistory = this._history();
     const itemIndex = currentHistory.findIndex(item => item.id === itemId);
     
     if (itemIndex === -1) {
@@ -136,10 +135,10 @@ export class HistoryManagementService {
 
     // Remove the item from history
     const updatedHistory = currentHistory.filter(item => item.id !== itemId);
-    this.historySubject.next(updatedHistory);
+    this._history.set(updatedHistory);
 
     // Delete audio file if using file system storage
-    const fileSystemState = this.storageState.getFileSystemState();
+    const fileSystemState = this.storageState.fileSystemState();
     if (fileSystemState.isEnabled && fileSystemState.directoryHandle) {
       await this.deleteAudioFile(itemId, fileSystemState.directoryHandle);
     }
@@ -159,8 +158,8 @@ export class HistoryManagementService {
     try {
       console.log('[HistoryManagementService] Clearing all history...');
 
-      // Clear history in memory and update observable
-      this.historySubject.next([]);
+      // Update signal instead of subject
+      this._history.set([]);
 
       // Clear from localStorage
       if (this.isBrowser && typeof localStorage !== 'undefined') {
@@ -168,7 +167,7 @@ export class HistoryManagementService {
       }
 
       // If using file system storage, delete all audio files and metadata file
-      const fileSystemState = this.storageState.getFileSystemState();
+      const fileSystemState = this.storageState.fileSystemState();
       if (fileSystemState.isEnabled && fileSystemState.directoryHandle) {
         const handle = fileSystemState.directoryHandle;
         
@@ -199,9 +198,15 @@ export class HistoryManagementService {
    * Replace entire history (used during storage mode switching)
    */
   async setHistory(newHistory: HistoryItem[]): Promise<void> {
-    this.historySubject.next(newHistory);
+    // Update history signal first
+    this._history.set(newHistory);
+    
+    // Then handle persistence
     await this.saveHistory(newHistory);
+    
+    // Update storage info immediately
     this.updateStorageInfo();
+    
     console.log(`[HistoryManagementService] History updated with ${newHistory.length} items`);
   }
 
@@ -209,7 +214,7 @@ export class HistoryManagementService {
    * Clear history without persisting (used during storage mode switching)
    */
   clearHistoryInMemory(): void {
-    this.historySubject.next([]);
+    this._history.set([]);
     this.updateStorageInfo();
   }
 
@@ -221,7 +226,7 @@ export class HistoryManagementService {
   private async saveHistory(history: HistoryItem[]): Promise<void> {
     if (!this.isBrowser) return;
 
-    const fileSystemState = this.storageState.getFileSystemState();
+    const fileSystemState = this.storageState.fileSystemState();
     if (fileSystemState.isEnabled && fileSystemState.directoryHandle) {
       // Save to file system
       await this.saveToFileSystem(history, fileSystemState.directoryHandle);
@@ -275,6 +280,10 @@ export class HistoryManagementService {
    * Update storage info
    */
   private updateStorageInfo(): void {
-    this.storageInfo.updateStorageInfo(this.historySubject.value, this.storageState.getFileSystemState());
+    const currentHistory = this._history();
+    const currentState = this.storageState.fileSystemState();
+    
+    // Update storage info with current state
+    this.storageInfo.updateStorageInfo(currentHistory, currentState);
   }
 }

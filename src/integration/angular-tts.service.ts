@@ -16,10 +16,10 @@ export class AngularTTSService {
     return undefined;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async saveSettings(settings: TTSSettings): Promise<void> {
+     async saveSettings(settings: TTSSettings): Promise<void> {
     // Never persist sensitive data like API keys
-    const { apiKey, ...safeSettings } = settings;
+    const safeSettings = { ...settings };
+    delete safeSettings.apiKey;
     
     // Store only safe settings
     localStorage.setItem('tts-settings', JSON.stringify(safeSettings));

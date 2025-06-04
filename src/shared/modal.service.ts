@@ -1,44 +1,41 @@
 import { Injectable, TemplateRef, signal, computed } from '@angular/core';
 
-export interface ModalConfig<T = unknown> {
-  template: TemplateRef<{ $implicit: T }>;
-  context: { $implicit: T };
-}
-
 export interface ModalRequest<T = unknown> {
   type: 'template' | 'component';
-  template?: TemplateRef<{ $implicit: T }>;
+  template?: TemplateRef<T>;
   componentType?: string;
-  context?: T;
   data?: T;
+  title?: string;
+  allowDismiss?: boolean;
 }
 
 export interface ModalState<T = unknown> {
-  template: TemplateRef<{ $implicit: T }> | null;
+  template: TemplateRef<T> | null;
   componentType: string | null;
-  context: T | null;
   data: T | null;
+  title: string | null;
+  allowDismiss: boolean;
   isOpen: boolean;
   requestId: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
-export class ModalService {
-  // Modal state management using signals
+export class ModalService {  // Modal state management using signals
   private readonly state = signal<ModalState<unknown>>({
     template: null,
     componentType: null,
-    context: null,
     data: null,
+    title: null,
+    allowDismiss: true,
     isOpen: false,
     requestId: null
   });
-
   // Expose read-only computed signals
   readonly template = computed(() => this.state().template);
   readonly componentType = computed(() => this.state().componentType);
-  readonly context = computed(() => this.state().context);
   readonly data = computed(() => this.state().data);
+  readonly title = computed(() => this.state().title);
+  readonly allowDismiss = computed(() => this.state().allowDismiss);
   readonly isOpen = computed(() => this.state().isOpen);
   readonly requestId = computed(() => this.state().requestId);
 
@@ -46,14 +43,14 @@ export class ModalService {
   readonly response = signal<{ requestId: string; value: unknown } | undefined>(undefined);
   /**
    * Shows a template-based modal
-   */
-  show<T>(config: ModalConfig<T>): string {
+   */  show<T>(config: ModalRequest<T>): string {
     const requestId = this.generateRequestId();
     this.state.set({
-      template: config.template,
+      template: config.template || null,
       componentType: null,
-      context: config.context.$implicit,
-      data: null,
+      data: config.data || null,
+      title: config.title || null,
+      allowDismiss: config.allowDismiss ?? true,
       isOpen: true,
       requestId
     });
@@ -62,32 +59,34 @@ export class ModalService {
 
   /**
    * Shows a component-based modal
-   */
-  showComponent<T>(componentType: string, data?: T): string {
+   */  showComponent<T>(request: ModalRequest<T>): string {
+    console.log('[ModalService] Showing component modal:', request);
     const requestId = this.generateRequestId();
     this.state.set({
       template: null,
-      componentType,
-      context: null,
-      data,
+      componentType: request.componentType || null,
+      data: request.data || null,
+      title: request.title || null,
+      allowDismiss: request.allowDismiss ?? true,
       isOpen: true,
       requestId
     });
+    console.log('[ModalService] State after update:', this.state());
     return requestId;
   }
 
   /**
    * Closes the modal with an optional response
-   */
-  close<T>(value?: T): void {
+   */  close<T>(value?: T): void {
     const currentState = this.state();
     
     // Update state
     this.state.set({
       template: null,
       componentType: null,
-      context: null,
       data: null,
+      title: null,
+      allowDismiss: true,
       isOpen: false,
       requestId: null
     });

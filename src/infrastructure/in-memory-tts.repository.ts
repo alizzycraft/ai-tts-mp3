@@ -169,16 +169,13 @@ export class LocalStorageTTSSettingsRepository extends TTSSettingsRepository {
     try {
       Logger.info('Saving TTS settings to local storage', { provider: settings.provider });
       
-      // Check if we're in a browser environment
       if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
         Logger.info('localStorage not available, skipping save');
         return;
       }
-        // Serialize settings for storage - strip sensitive data
-      const { apiKey, credentials, ...safeSettings } = settings;
-      // Only store non-sensitive settings
+
+      // Omit sensitive data without destructuring unused variables
       const storageData = {
-        ...safeSettings,
         provider: settings.provider,
         model: settings.model,
         voice: settings.voice
@@ -207,12 +204,11 @@ export class LocalStorageTTSSettingsRepository extends TTSSettingsRepository {
         Logger.info('No TTS settings found in local storage');
         return null;
       }      const data = JSON.parse(stored);
-      // Explicitly exclude sensitive fields even if they are present in stored data
-      const { apiKey, credentials, ...safeData } = data;
+      // Omit sensitive fields without destructuring
       const settings: TTSSettings = {
-        provider: safeData.provider,
-        model: safeData.model,
-        voice: safeData.voice
+        provider: data.provider,
+        model: data.model,
+        voice: data.voice
       };
 
       Logger.info('TTS settings loaded from local storage', { 

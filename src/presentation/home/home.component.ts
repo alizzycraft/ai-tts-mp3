@@ -106,7 +106,33 @@ export class HomeComponent implements OnInit, AfterViewInit {
           this.historyPanel.clearSelection();
         }
       }
+
+      // Auto-select the new history item after generation
+      await this.onHistoryItemSelected(result.historyItem);
     }
+  }
+  // History interaction methods - delegate to HistoryInteractionManagerService
+  async onHistoryItemSelected(item: HistoryItem): Promise<void> {
+    await this.historyInteractionManager.selectHistoryItem(item);
+    // Update input text with the selected item's text
+    if (item) {
+      this.inputText.set(item.text);
+      // Set the audio player result to the selected history item
+      this.ttsGenerationManager.currentResult.set(item.result);
+    } else {
+      // Clear the audio player result if nothing is selected
+      this.ttsGenerationManager.currentResult.set(null);
+    }
+  }
+
+  async onHistoryPanelPlayItem(item: HistoryItem): Promise<void> {
+    // Only play/pause audio for the item; do NOT update editor text or select the item
+    await this.historyInteractionManager.playHistoryItem(item);
+  }
+
+  clearResult() {
+    this.ttsGenerationManager.clearResult();
+    this.historyInteractionManager.clearAll();
   }
 
   // Storage warning methods - delegate to TTSGenerationManagerService
@@ -122,28 +148,6 @@ export class HomeComponent implements OnInit, AfterViewInit {
   async proceedWithGeneration(): Promise<void> {
     this.showRemovalPreview = false;
     await this.generateSpeech(); // This will now proceed without storage check
-  }
-
-  // History interaction methods - delegate to HistoryInteractionManagerService
-  async onHistoryItemSelected(item: HistoryItem | null): Promise<void> {
-    await this.historyInteractionManager.selectHistoryItem(item);
-    
-    // Update input text with the selected item's text
-    if (item) {
-      this.inputText.set(item.text);
-    }
-  }
-
-  async onHistoryPanelPlayItem(item: HistoryItem): Promise<void> {
-    await this.historyInteractionManager.playHistoryItem(item);
-    
-    // Update input text and ensure item is selected in panel
-    this.inputText.set(item.text);
-  }
-
-  clearResult() {
-    this.ttsGenerationManager.clearResult();
-    this.historyInteractionManager.clearAll();
   }
 
   // Private helper methods

@@ -1,0 +1,102 @@
+// Integration layer wrapper for history storage
+import { Injectable, Inject, PLATFORM_ID, Signal } from '@angular/core';
+import { 
+  HistoryItem, 
+  StorageInfo 
+} from '../infrastructure/storage/storage-types';
+import { HistoryManagementService } from '../infrastructure/storage/history-management.service';
+import { FileSystemStorageManagerService } from '../infrastructure/storage/file-system-storage-manager.service';
+import { StorageStateService, FileSystemStorageState, FolderReconnectionPrompt } from '../infrastructure/storage/storage-state.service';
+import { StorageInfoService } from '../infrastructure/storage/storage-info.service';
+import { TTSSettings, TTSResult } from '../domain/tts.entity';
+import { LoggingService } from './logging.service';
+import { MonitoringService } from './monitoring.service';
+import { isPlatformBrowser } from '@angular/common';
+import { IHistoryStorage } from './interfaces';
+import { HISTORY_STORAGE_TOKEN } from './tokens';
+
+@Injectable({
+  providedIn: 'root',
+  useExisting: HISTORY_STORAGE_TOKEN
+})
+export class IntegratedHistoryStorageService implements IHistoryStorage {
+  private initialized = false;
+
+  // Expose signals as per IHistoryStorage interface
+  readonly items: Signal<HistoryItem[]>;
+  readonly storage: Signal<StorageInfo>;
+  readonly fileSystem: Signal<FileSystemStorageState>;
+  readonly reconnection: Signal<FolderReconnectionPrompt | null>;
+
+  constructor(
+    @Inject(PLATFORM_ID) private platformId: object,
+    private logging: LoggingService,
+    private monitoring: MonitoringService,
+    private historyManagement: HistoryManagementService,
+    private fileSystemManager: FileSystemStorageManagerService,
+    private storageStateService: StorageStateService,
+    private storageInfoService: StorageInfoService
+  ) {
+    // Initialize signals directly from services
+    this.items = this.historyManagement.history;
+    this.storage = this.storageInfoService.storageInfo;
+    this.fileSystem = this.storageStateService.fileSystemState;
+    this.reconnection = this.storageStateService.folderReconnectionPrompt;
+
+    if (this.isBrowser) {
+      this.ensureInitialized().catch(error => 
+        this.logging.error('Failed to initialize history storage', error as Error));
+    }
+  }
+
+  private get isBrowser(): boolean {
+    return isPlatformBrowser(this.platformId);
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
+
+    try {
+      this.logging.debug('Initializing history storage services', 'History');
+      
+      // Wait for all services to be ready
+      await Promise.all([
+        this.storageInfoService.ready(),
+        this.fileSystemManager.ready(),
+        this.historyManagement.ready()
+      ]);
+      
+      this.initialized = true;
+      this.logging.info('History storage services initialized', 'History');
+      
+    } catch (error) {
+      this.initialized = false;
+      this.logging.error('Failed to initialize history storage', error as Error);
+      throw error;
+    }
+  }
+
+  // File system operations
+  async enableFileSystemStorage(): Promise<void> {
+    await this.ensureInitialized();
+    await this.fileSystemManager.enableFileSystem();
+  }
+
+  async disableFileSystemStorage(): Promise<void> {
+    await this.ensureInitialized();
+    await this.fileSystemManager.disableFileSystem();
+  }
+
+  async handleFolderReconnection(accepted: boolean): Promise<void> {
+    await this.fileSystemManager.handleReconnection(accepted);
+  }
+
+  // History management
+  async deleteHistoryItem(id: string): Promise<void> {
+    await this.historyManagement.delete(id);
+  }
+
+  async clearHistory(): Promise<void> {
+    await this.historyManagement.clear();
+  }
+}

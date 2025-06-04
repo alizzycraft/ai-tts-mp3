@@ -46,7 +46,7 @@
         <div class="right-metadata">
         <span class="created-at-info" [title]="displayCreatedAt() | date:'medium'">{{ displayCreatedAt() | formatDate }}</span>
         <span class="size-info">{{ displaySize() }}</span>
-        <span class="duration-info">{{ currentResult()?.duration | formatDuration }}</span>
+        <span class="duration-info">{{ playbackService.totalDuration() | formatDuration }}</span>
       </div>
     </div>
   </div>

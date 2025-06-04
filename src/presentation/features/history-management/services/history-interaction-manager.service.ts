@@ -1,5 +1,5 @@
 // History Interaction Manager - handles history item selection and playback
-import { Injectable, signal, inject } from '@angular/core';
+import { Injectable, signal, inject, OnDestroy, computed } from '@angular/core';
 import { IntegratedHistoryStorageService, HistoryItem } from '../../../../integration/history-storage.service';
 import { PlaybackService } from '../../../../integration/playback.service';
 import { TTSResult } from '../../../../integration/domain-types';
@@ -21,11 +21,11 @@ export interface QueryInfo {
 @Injectable({
   providedIn: 'root'
 })
-export class HistoryInteractionManagerService {
+export class HistoryInteractionManagerService implements OnDestroy {
   private historyService = inject(IntegratedHistoryStorageService);
   private playbackService = inject(PlaybackService);
 
-  // Expose playback state from PlaybackService for UI coordination
+  // Expose playback state from PlaybackService
   readonly playingItemId = this.playbackService.playingItemId;
   readonly isPlaying = this.playbackService.isPlaying;
 
@@ -34,48 +34,72 @@ export class HistoryInteractionManagerService {
   selectedHistoryItem = signal<HistoryItem | null>(null);
   tempHistoryItem = signal<HistoryItem | null>(null);
 
+  // Computed signal to handle auto-selection of new items
+  private readonly autoSelectLatest = computed(() => {    const items = this.historyService.items();
+    if (items.length === 0) return;
+
+    const latestItem = items[0]; // Items are in reverse chronological order
+    const currentSelection = this.selectedHistoryItem();
+
+    // Only auto-select if no item is currently selected or if it's a new item
+    if (!currentSelection || latestItem.id !== currentSelection.id) {
+      console.log('[HistoryInteractionManager] Auto-selecting new history item:', latestItem.id);
+      queueMicrotask(() => this.selectHistoryItem(latestItem));
+    }
+  });
+
+  constructor() {
+    // Just ensure the computed signal is active
+    this.autoSelectLatest();
+  }
+  ngOnDestroy() {
+    // Reset stateful signals to initial values
+    this.selectedHistoryItem.set(null);
+    this.currentQueryInfo.set(null);
+    this.tempHistoryItem.set(null);
+  }
+
   /**
    * Handle history item selection
    */
+  clearSelection(): void {
+    this.selectHistoryItem(null).catch(error => {
+      console.error('[HistoryInteractionManager] Error clearing selection:', error);
+    });
+  }
+
   async selectHistoryItem(item: HistoryItem | null): Promise<void> {
     try {
       if (item) {
         console.log('[HistoryInteractionManager] Selecting history item:', item.id);
-
+        
+        // Update selection state first
         this.selectedHistoryItem.set(item);
-
-        // Update the current query info based on the selected history item
-        this.currentQueryInfo.set({
-          text: item.text,
-          title: item.metadata?.title,
-          settings: item.settings ? {
-            provider: item.settings.provider,
-            model: item.settings.model,
-            voice: item.settings.voice
-          } : undefined,
-          estimatedDuration: item.result?.duration,
-          createdAt: item.createdAt,
-          id: item.id,
-          audioSize: item.audioSize
-        });
-
-        // Load audio into the player. Do NOT automatically play when selecting.
+        
+        // Update query info immediately
+        this.updateQueryInfoFromHistoryItem(item);
+        
+        // Then load audio in background
         if (item.result) {
           await this.playbackService.loadAudio(item.result, item.id);
         }
-
-        console.log('[HistoryInteractionManager] History item selected successfully');
       } else {
-        // Handle deselection
-        console.log('[HistoryInteractionManager] Deselecting history item');
-        
         this.selectedHistoryItem.set(null);
         this.currentQueryInfo.set(null);
-        this.playbackService.stop(true); // Stop playback and clear loaded audio on deselection
+        this.playbackService.stop(true);
       }
     } catch (error) {
       console.error('[HistoryInteractionManager] Error selecting history item:', error);
     }
+  }
+
+  // Add this method to handle new items
+  setLatestHistoryItem(item: HistoryItem): void {
+    console.log('[HistoryInteractionManager] Setting latest history item:', item.id);
+    // Automatically select the new item
+    this.selectHistoryItem(item).catch(error => {
+      console.error('[HistoryInteractionManager] Error auto-selecting new item:', error);
+    });
   }
 
   /**
@@ -85,17 +109,27 @@ export class HistoryInteractionManagerService {
     try {
       console.log('[HistoryInteractionManager] Playing history item:', item.id);
 
-      // If this item is currently playing, toggle pause
+      // If this item is currently playing, make sure we pass the result when toggling
       if (this.playbackService.playingItemId() === item.id) {
-        await this.playbackService.togglePlayPause();
+        if (!item.result?.audioData) {
+          console.warn('[HistoryInteractionManager] Cannot toggle playback - no audio data available');
+          return;
+        }
+        await this.playbackService.togglePlayPause(item.result, item.id);
         return;
       }
 
       // First select the item (loads audio without playing)
       await this.selectHistoryItem(item);
 
+      // Verify we have audio data before playing
+      if (!item.result?.audioData) {
+        console.error('[HistoryInteractionManager] Cannot play item - no audio data available');
+        return;
+      }
+
       // Then explicitly play the loaded audio
-      this.playbackService.play();
+      await this.playbackService.togglePlayPause(item.result, item.id);
 
       console.log('[HistoryInteractionManager] History item playback started');
     } catch (error) {
@@ -182,5 +216,54 @@ export class HistoryInteractionManagerService {
    */
   getCurrentItem(): HistoryItem | null {
     return this.selectedHistoryItem() || this.tempHistoryItem();
+  }
+
+  /**
+   * Update query info based on selected history item
+   */
+  private updateQueryInfoFromHistoryItem(item: HistoryItem): void {
+    this.currentQueryInfo.set({
+      text: item.text,
+      title: item.metadata?.title,
+      settings: item.settings ? {
+        provider: item.settings.provider,
+        model: item.settings.model,
+        voice: item.settings.voice
+      } : undefined,
+      estimatedDuration: item.result?.duration,
+      createdAt: item.createdAt,
+      id: item.id,
+      audioSize: item.audioSize
+    });
+  }
+
+  /**
+   * Download history item audio
+   */
+  async downloadHistoryItem(item: HistoryItem): Promise<void> {
+    try {
+      if (!item.result?.audioData) {
+        console.error('[HistoryInteractionManager] Cannot download - no audio data available');
+        return;
+      }
+
+      const blob = new Blob([item.result.audioData], { type: 'audio/mpeg' });
+      const url = URL.createObjectURL(blob);
+      
+      // Create download link
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `tts-${item.metadata?.title || 'audio'}-${item.id.slice(0, 8)}.mp3`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Clean up
+      URL.revokeObjectURL(url);
+      
+      console.log('[HistoryInteractionManager] History item downloaded:', item.id);
+    } catch (error) {
+      console.error('[HistoryInteractionManager] Error downloading history item:', error);
+    }
   }
 }

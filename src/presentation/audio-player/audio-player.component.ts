@@ -1,13 +1,12 @@
 import { Component, computed, input, output, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { TTSResult, ModelProvider, Voice } from '../../integration/domain-types';
+import { TTSResult, ModelProvider, Voice, HistoryItem } from '../../integration/domain-types';
 import { FormatDatePipe } from '../shared/pipes/format-date.pipe';
 import { FormatDurationPipe } from '../shared/pipes/format-duration.pipe';
 import { TruncateTextPipe } from '../shared/pipes/truncate-text.pipe';
 import { PlaybackService } from '../../integration/playback.service';
 import { AngularTTSService } from '../../integration/angular-tts.service';
 import { SettingsService } from '../shared/settings.service';
-import { HistoryItem } from '../../infrastructure/storage/storage-types';
 
 // Define a type for currentQueryInfo
 interface CurrentQueryInfo {
@@ -63,16 +62,14 @@ export class AudioPlayerComponent implements OnDestroy {
     const result = this.currentResult();
     if (!result) return null;
     
-    // Log result changes
-    if (result.duration) {
-      console.log('[AudioPlayer] Duration found!', result.duration);
-    }
-    if (result.fileSize) {
-      console.log('[AudioPlayer] File size found!', result.fileSize);
+    // Use PlaybackService duration instead of result duration
+    const duration = this.playbackService.totalDuration();
+    if (duration) {
+      console.log('[AudioPlayer] Using PlaybackService duration:', duration);
     }
     
     return {
-      duration: result.duration,
+      duration: duration || 0, // Use PlaybackService duration or fall back to 0
       fileSize: result.fileSize
     };
   });
@@ -102,10 +99,10 @@ export class AudioPlayerComponent implements OnDestroy {
   });
   // Computed property for progress percentage (using PlaybackService state)
   progressPercentage = computed(() => {
-    const dur = this.currentResult()?.duration || 0; // Use duration from result or 0
-    const curr = this.playbackService.currentTime();
+    const duration = this.playbackService.totalDuration();
+    const currentTime = this.playbackService.currentTime();
     const isAtEnd = !this.playbackService.isPlaying() && this.playbackService.hasEnded();
-    return dur > 0 ? (isAtEnd ? 100 : (curr / dur) * 100) : 0;
+    return duration > 0 ? (isAtEnd ? 100 : (currentTime / duration) * 100) : 0;
   });
 
   // Computed properties for metadata display
@@ -156,11 +153,18 @@ export class AudioPlayerComponent implements OnDestroy {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   });
 
-  // Add a log for duration specifically
+  // Update display duration computed to always use PlaybackService duration
   displayDuration = computed(() => {
-    const result = this.currentResult(); // Get the full currentResult object
-    const duration = result?.duration;
-    return duration; // The formatting pipe will handle display
+    const duration = this.playbackService.totalDuration();
+    // Log the source of the duration we're using
+    console.log('[AudioPlayer] Display duration from PlaybackService:', duration);
+    return duration || 0;
+  });
+
+  // Add a new computed for metadata display duration
+  metadataDuration = computed(() => {
+    const duration = this.playbackService.totalDuration();
+    return duration || 0;
   });
 
   ngOnDestroy(): void {
@@ -169,23 +173,21 @@ export class AudioPlayerComponent implements OnDestroy {
 
   async downloadAudio() {
     const result = this.currentResult();
-    if (!result) return;
+    if (!result || !result.audioData) return;
 
     try {
-      const audioUrl = await this.ttsService.downloadAudio(result);
-      if (audioUrl) {
-        const queryInfo = this.currentQueryInfo();
-        const title = queryInfo?.title || 'audio';
-        const timestamp = Date.now();
-        
-        const link = document.createElement('a');
-        link.href = audioUrl;
-        link.download = `tts-${title}-${timestamp}.mp3`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(audioUrl);
-      }
+      const queryInfo = this.currentQueryInfo();
+      const title = queryInfo?.title || 'audio';
+      const timestamp = Date.now();
+      const blob = new Blob([result.audioData], { type: 'audio/mpeg' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `tts-${title}-${timestamp}.mp3`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Failed to download audio:', error);
     }
@@ -197,12 +199,15 @@ export class AudioPlayerComponent implements OnDestroy {
   async onProgressBarClick(event: MouseEvent) {
     const progressBar = event.currentTarget as HTMLElement;
     const rect = progressBar.getBoundingClientRect();
-    const offsetX = Math.min(Math.max(0, event.clientX - rect.left), rect.width); // Clamp value
+    const offsetX = Math.min(Math.max(0, event.clientX - rect.left), rect.width);
     const percentage = offsetX / rect.width;
     
-    // Always load the audio first if not loaded
-    if (!this.playbackService.totalDuration()) {
-      await this.playbackService.loadAudio(this.currentResult()!, this.currentQueryInfo()?.id);
+    const result = this.currentResult();
+    const queryInfo = this.currentQueryInfo();
+    
+    // Ensure audio is loaded
+    if (result && (!this.playbackService.totalDuration() || this.playbackService.totalDuration() === 0)) {
+      await this.playbackService.loadAudio(result, queryInfo?.id);
     }
 
     // Always play when seeking to a new position, unless the seek is to 100%

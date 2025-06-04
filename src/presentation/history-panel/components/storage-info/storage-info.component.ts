@@ -1,6 +1,5 @@
 import { Component, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { StorageInfo } from '../../../../integration/history-storage.service';
 import { FormatFileSizePipe } from '../../../shared/pipes/format-file-size.pipe';
 
 @Component({
@@ -10,8 +9,14 @@ import { FormatFileSizePipe } from '../../../shared/pipes/format-file-size.pipe'
   templateUrl: './storage-info.component.html',
   styleUrls: ['./storage-info.component.scss']
 })
-export class StorageInfoComponent {
-  storageInfo = input.required<any>(); // Accepts isFileSystem, folderName, etc.
+export class StorageInfoComponent {  storageInfo = input.required<{
+    isFileSystem: boolean;
+    folderName?: string;
+    used: number;
+    available: number;
+    usedPercentage: number;
+    itemCount: number;
+  }>(); // Storage information type
   showStorageBar = input.required<boolean>();
   warningLevel = input.required<'normal' | 'warning' | 'critical'>();
   toggleFileSystem = output<void>();

@@ -1,196 +1,199 @@
-import { Component, ChangeDetectionStrategy, computed, input, output, signal, inject } from '@angular/core';
+import { Component, signal, computed, output, input, Inject, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HISTORY_STORAGE_TOKEN } from '../../integration/tokens';
+import { IHistoryStorage } from '../../integration/interfaces';
+import { ModalService } from '../../shared/modal.service';
+import { HistoryListAreaComponent } from './components/history-list-area/history-list-area.component';
 import { StorageInfoComponent } from './components/storage-info/storage-info.component';
 import { FileSystemManagerComponent } from './components/file-system-manager/file-system-manager.component';
-import { HistoryListAreaComponent } from './components/history-list-area/history-list-area.component';
-import { ModelProvider } from '../../domain/tts.entity';
-import { ModalService } from '../../shared/modal.service';
-import { IntegratedHistoryStorageService } from '../../integration/history-storage.service';
-import { StorageInfo, HistoryItem } from '../../infrastructure/storage/storage-types';
-import { FileSystemStorageState, FolderReconnectionPrompt } from '../../infrastructure/storage/storage-state.service';
+import { PresentationHistoryItem } from '../shared/models/presentation-types';
+import { FolderReconnectionPrompt, HistoryItem } from '../../integration/domain-types';
+import { HistoryInteractionManagerService } from '../features/history-management/services/history-interaction-manager.service';
 
 @Component({
   selector: 'app-history-panel',
   standalone: true,
   imports: [
-    CommonModule,
-    FormsModule,
-    StorageInfoComponent,
-    FileSystemManagerComponent,
-    HistoryListAreaComponent
+    CommonModule, 
+    FormsModule, 
+    HistoryListAreaComponent, 
+    StorageInfoComponent, 
+    FileSystemManagerComponent
   ],
   templateUrl: './history-panel.component.html',
-  styleUrl: './history-panel.component.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  styleUrls: ['./history-panel.component.scss']
 })
 export class HistoryPanelComponent {
-  // Inputs
-  playingItemId = input<string | null>(null);
-  isPlaying = input<boolean>(false);
-
-  // Outputs
-  historyItemSelected = output<HistoryItem | null>();
+  private historyInteractionManager = inject(HistoryInteractionManagerService);
+  
+  // Outputs for parent component communication
+  historyItemSelected = output<HistoryItem>();
   playItem = output<HistoryItem>();
-  // Services
-  private modalService = inject(ModalService);
-  private historyService = inject(IntegratedHistoryStorageService);
-  // State signals
-  searchQuery = signal('');
-  selectedItemId = signal<string | null>(null);
-  showDeleteModal = signal(false);
-  showClearModal = signal(false);
-  itemToDelete = signal<HistoryItem | null>(null);
-  history = signal<HistoryItem[]>([]);
-  storageInfo = signal<StorageInfo>({ used: 0, available: 0, total: 0, usedPercentage: 0, itemCount: 0 });
-  fileSystemState = signal<FileSystemStorageState>({ 
-    isSupported: false, 
-    isEnabled: false, 
-    selectedPath: null,
-    directoryHandle: null
-  });
+  downloadItem = output<HistoryItem>();
+  
+  // Selection state
+  private _selectedItemId = signal<string | null>(null);
+  
+  // Inputs
+  readonly playingItemId = input<string | null>();
+  readonly isPlaying = input<boolean>();
 
-  // Modal state management
-  private modalRequestId = signal<string | null>(null);
-  private waitingForModalResponse = signal(false);
+  // Core state signals
+  private readonly _searchQuery = signal('');
+  private readonly _itemToDelete = signal<HistoryItem | null>(null); 
+  private readonly _showDeleteModal = signal(false);
+  private readonly _showClearModal = signal(false);
 
-  // Computed values
-  filteredHistory = computed(() => {
-    const query = this.searchQuery().toLowerCase();
-    if (!query) return this.history();
+  // Public accessors for template
+  readonly searchQuery = computed(() => this._searchQuery());
+  readonly selectedItemId = computed(() => this.historyInteractionManager.selectedHistoryItem()?.id || null);
+  readonly showDeleteModal = computed(() => this._showDeleteModal());
+  readonly showClearModal = computed(() => this._showClearModal());
+  readonly filteredHistory = computed(() => {
+    const query = this._searchQuery().toLowerCase();
+    if (!query) return this.historyItems();
     
-    return this.history().filter(item => 
+    return this.historyItems().filter(item => 
       item.text.toLowerCase().includes(query) ||
-      item.metadata?.title?.toLowerCase().includes(query) ||
-      item.metadata?.tags?.some(tag => tag.toLowerCase().includes(query))
+      (item.metadata?.title && item.metadata.title.toLowerCase().includes(query))
     );
   });
 
-  storageWarningLevel = computed(() => {
-    const percentage = this.storageInfo().usedPercentage;
+  // Reactive state derived from history service signals
+  readonly historyItems = computed(() => this.historyService.items());
+  readonly storage = computed(() => this.historyService.storage());
+  readonly fileSystem = computed(() => this.historyService.fileSystem());
+  private readonly promptSignal = computed(() => this.historyService.reconnection());
+
+  // Computed UI state  
+  readonly storageWarningLevel = computed(() => {
+    const storage = this.storage();
+    const percentage = storage.used / (storage.used + storage.available);
     if (percentage > 0.9) return 'critical';
     if (percentage > 0.8) return 'warning';
     return 'normal';
   });
-  showStorageBar = computed(() => {
-    return !this.fileSystemState().isEnabled;
+
+  readonly showStorageBar = computed(() => !this.fileSystem().isEnabled);
+
+  readonly storageInfo = computed(() => {
+    const storage = this.storage();
+    const fileSystem = this.fileSystem();
+    const items = this.historyItems();
+
+    return {
+      used: storage.used,
+      available: storage.available,
+      isFileSystem: fileSystem.isEnabled,
+      usedPercentage: storage.used / (storage.used + storage.available),
+      itemCount: items.length,
+      folderName: fileSystem.selectedPath || undefined
+    };
   });
-  storageInfoForDisplay = computed(() => ({
-    ...this.storageInfo(),
-    isFileSystem: this.fileSystemState().isEnabled,
-    folderName: this.fileSystemState().selectedPath
-  }));
 
-  // Modal response handling - purely signal-based
-  private modalResponseHandler = computed(() => {
-    const response = this.modalService.response();
-    const currentRequestId = this.modalRequestId();
-    const waiting = this.waitingForModalResponse();
+  constructor(
+    @Inject(HISTORY_STORAGE_TOKEN) private historyService: IHistoryStorage,
+    private modalService: ModalService
+  ) {}
 
-    if (response && currentRequestId && waiting && response.requestId === currentRequestId) {
-      // Handle modal response
-      this.handleModalResponse(response.value);
-      // Clear the response and reset state
-      this.modalService.clearResponse();
-      this.modalRequestId.set(null);
-      this.waitingForModalResponse.set(false);
-    }
-  });
-  // Lifecycle methods
-  constructor() {
-    // Subscribe to history service
-    this.historyService.history$.subscribe((items: HistoryItem[]) => this.history.set(items));
-    this.historyService.storageInfo$.subscribe((info: StorageInfo) => this.storageInfo.set(info));
-    this.historyService.fileSystemState$.subscribe((state: FileSystemStorageState) => this.fileSystemState.set(state));
-
-    // Handle folder reconnection prompts using signals
-    this.historyService.folderReconnectionPrompt$.subscribe((prompt: FolderReconnectionPrompt | null) => {
-      if (!prompt) return;
-      this.showReconnectionModal(prompt);
-    });
-
-    // Trigger the modal response handler computation
-    this.modalResponseHandler();
+  // Event handlers
+  onSearchQueryChange(query: string): void {
+    this._searchQuery.set(query);
   }
 
-  // Modal response handler
-  private handleModalResponse(value: unknown): void {
-    if (typeof value === 'boolean') {
-      // This is a reconnection confirmation response
-      void this.historyService.handleFolderReconnection(value);
+  async onItemSelect(item: HistoryItem): Promise<void> {
+    try {
+      this.historyInteractionManager.clearSelection();
+      await this.historyInteractionManager.selectHistoryItem(item);
+      this._selectedItemId.set(item.id);
+      this.historyItemSelected.emit(item);
+    } catch (error) {
+      console.error('[HistoryPanel] Error selecting item:', error);
     }
   }
 
-  // Reconnection modal handlers
-  private showReconnectionModal(prompt: FolderReconnectionPrompt) {
-    // Set waiting state and show modal
-    this.waitingForModalResponse.set(true);
-    const requestId = this.modalService.showComponent('reconnection-prompt', prompt);
-    this.modalRequestId.set(requestId);
+  async onPlayItemClick(item: HistoryItem): Promise<void> {
+    try {
+      await this.historyInteractionManager.playHistoryItem(item);
+      this.playItem.emit(item);
+    } catch (error) {
+      console.error('[HistoryPanel] Error playing item:', error);
+    }
   }
 
-  onReconnectConfirm(confirmed: boolean): void {
-    this.modalService.close(confirmed);
+  async onDownloadItemClick(item: HistoryItem): Promise<void> {
+    await this.historyInteractionManager.downloadHistoryItem(item);
+    this.downloadItem.emit(item);
   }
 
-  // History item actions
-  selectItem(item: HistoryItem): void {
-    this.selectedItemId.set(item.id);
-    this.historyItemSelected.emit(item);
+  onToggleStorage(): void {
+    const state = this.fileSystem();
+    if (state.isEnabled) {
+      this.historyService.disableFileSystemStorage();
+    } else {
+      this.historyService.enableFileSystemStorage();
+    }
   }
 
-  clearSelection(): void {
-    this.selectedItemId.set(null);
-    this.historyItemSelected.emit(null);
+  onChangeFolder(): void {
+    this.historyService.enableFileSystemStorage();
   }
 
-  deleteItem(item: HistoryItem, event: Event): void {
-    event.stopPropagation();
-    this.itemToDelete.set(item);
-    this.showDeleteModal.set(true);
+  onReconnectConfirm(shouldReconnect: boolean): void {
+    this.historyService.handleFolderReconnection(shouldReconnect);
   }
 
-  // Modal actions
-  onDeleteConfirm(): void {
-    const item = this.itemToDelete();
+  deleteItem(item: HistoryItem): void {
+    this._itemToDelete.set(item);
+    this._showDeleteModal.set(true);
+  }
+
+  onDeleteItemConfirm(): void {
+    const item = this._itemToDelete();
     if (item) {
-      void this.historyService.deleteHistoryItem(item.id);
-      this.showDeleteModal.set(false);
-      this.itemToDelete.set(null);
+      this.historyService.deleteHistoryItem(item.id);
+      this._showDeleteModal.set(false);
+      this._itemToDelete.set(null);
     }
+  }
+
+  cancelDeleteItem(): void {
+    this._showDeleteModal.set(false);
+    this._itemToDelete.set(null);
   }
 
   onClearAllConfirm(): void {
-    void this.historyService.clearHistory();
-    this.showClearModal.set(false);
-  }
-
-  // Modal cancel handlers
-  cancelDeleteItem(): void {
-    this.showDeleteModal.set(false);
-    this.itemToDelete.set(null);
+    this.historyService.clearHistory();
+    this._showClearModal.set(false);
   }
 
   cancelClearAll(): void {
-    this.showClearModal.set(false);
+    this._showClearModal.set(false);
   }
 
-  // File system actions
-  async onToggleStorage(): Promise<void> {
-    const state = this.fileSystemState();
-    if (state.isEnabled) {
-      await this.historyService.disableFileSystemStorage();
-    } else {
-      await this.historyService.enableFileSystemStorage();
-    }
+  clearSelection(): void {
+    this.historyInteractionManager.clearSelection();
   }
 
-  async onChangeFolder(): Promise<void> {
-    await this.historyService.enableFileSystemStorage();
+  handlePlayItem(event: { item: HistoryItem; event: Event }): void {
+    event.event.preventDefault();
+    event.event.stopPropagation();
+    this.playItem.emit(event.item);
   }
 
-  // Setter for searchQuery signal to be passed to child
-  setSearchQuery(value: string) {
-    this.searchQuery.set(value);
+  protected getItemCount(): number {
+    return this.historyItems().length;
+  }
+
+  protected formatSize(bytes: number): string {
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    if (bytes === 0) return '0 Bytes';
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
+  }
+
+  updateSearchQuery(query: string): void {
+    this._searchQuery.set(query);
   }
 }

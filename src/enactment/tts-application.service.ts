@@ -36,9 +36,9 @@ export class TTSApplicationService {
   ): Promise<Result<TTSQuery, string>> {
     try {
       Logger.info('Creating TTS query', { textLength: text.length, provider: settings.provider });
-      
-      // Create sanitized settings without API key for storage
-      const { apiKey, ...safeSettings } = settings;
+        // Create sanitized settings for storage
+      const safeSettings = { ...settings };
+      delete safeSettings.apiKey;
       
       // Validate settings using domain service
       this.domainService.validateSettings(settings);

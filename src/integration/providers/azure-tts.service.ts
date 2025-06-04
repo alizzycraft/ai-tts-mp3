@@ -1,7 +1,6 @@
 import { Injectable, signal, computed, Inject, PLATFORM_ID } from "@angular/core";
 import { LoggingService } from "../logging.service";
 import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus } from "../../domain/tts.entity";
-import { ApiKey } from "../../domain/value-objects/api-key";
 import { Result } from "../../common/result";
 import { ProviderHealthMetrics, ProviderMonitoringService } from "../monitoring/provider-monitoring.service";
 import { TTSProvider } from "./tts-provider.factory";

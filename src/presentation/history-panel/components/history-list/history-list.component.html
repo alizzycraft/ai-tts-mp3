@@ -45,13 +45,25 @@
           <span class="duration">{{ item.result.duration | formatDuration }}</span>
         </div>
         <div class="item-actions">
-          <button class="item-action-btn play-btn" (click)="onPlayPauseClick($event, item)" [title]="isPlaying(item) ? 'Pause audio' : 'Play audio'">
+          <button 
+            class="item-action-btn play-btn" 
+            (click)="onPlayPauseClick($event, item)" 
+            [title]="isPlaying(item) ? 'Pause audio' : 'Play audio'"
+            type="button">
             <img [src]="isPlaying(item) ? 'assets/icons/outline/player-pause.svg' : 'assets/icons/outline/player-play.svg'" width="14" height="14" class="action-icon" [alt]="isPlaying(item) ? 'Pause' : 'Play'">
           </button>
-          <button class="item-action-btn download-btn" (click)="onDownloadClick($event, item)" title="Download audio">
+          <button 
+            class="item-action-btn download-btn" 
+            (click)="onDownloadClick($event, item)" 
+            title="Download audio"
+            type="button">
             <img src="assets/icons/outline/download.svg" width="14" height="14" class="action-icon" alt="Download">
           </button>
-          <button class="item-action-btn delete-btn" (click)="onDeleteClick($event, item)" title="Delete item">
+          <button 
+            class="item-action-btn delete-btn" 
+            (click)="onDeleteClick($event, item)" 
+            title="Delete item"
+            type="button">
             <img src="assets/icons/outline/trash.svg" width="14" height="14" class="action-icon" alt="Delete">
           </button>
         </div>
@@ -65,8 +77,6 @@
       </div>
       <div class="empty-title">No TTS history yet</div>
       <div class="empty-desc">Generated speech will appear here</div>
-      <!-- Optional: Add a footer if needed -->
-      <!-- <div class="empty-footer">Try generating speech to see your history here!</div> -->
     </div>
   }
 </div>

@@ -23,10 +23,11 @@ import { FormatDurationPipe } from '../../../shared/pipes/format-duration.pipe';
   styleUrls: ['./history-list.component.scss']
 })
 export class HistoryListComponent {
-    // Dependency injection
+  // Dependency injection
   public playbackService = inject(PlaybackService);
 
-  // Input signals  searchQuery = input.required<string>();
+  // Input signals
+  searchQuery = input.required<string>();
   selectedItemId = input.required<string | null>();
   history = input.required<HistoryItem[]>();
   filteredHistory = input.required<HistoryItem[]>();
@@ -41,9 +42,9 @@ export class HistoryListComponent {
   downloadItem = output<{ item: HistoryItem, event: Event }>();
   playPauseItem = output<{ item: HistoryItem, event: Event }>();
 
-  // Helpers
+  // Helper methods
   isPlaying(item: HistoryItem): boolean {
-    return this.playbackService.playingItemId() === item.id &&
+    return this.playbackService.playingItemId() === item.id && 
            this.playbackService.isPlaying();
   }
 
@@ -60,7 +61,9 @@ export class HistoryListComponent {
   onDownloadClick(event: Event, item: HistoryItem): void {
     event.stopPropagation();
     this.downloadItem.emit({ item, event });
-  }  onDeleteClick(event: Event, item: HistoryItem): void {
+  }
+
+  onDeleteClick(event: Event, item: HistoryItem): void {
     event.stopPropagation();
     this.deleteItem.emit({ item, event });
   }
@@ -70,7 +73,7 @@ export class HistoryListComponent {
     this.clearHistory.emit();
   }
 
-  // Utility methods for icon and display mapping
+  // Utility methods for icon mapping
   getProviderIcon(provider: string): string {
     switch ((provider || '').toLowerCase()) {
       case 'openai': return 'robot';
@@ -103,15 +106,14 @@ export class HistoryListComponent {
   }
 
   getVoiceDisplayText(voice: string, provider: string): string {
-    // For Azure, AWS, and Google voices, extract language code or return voice name
-    if (["azure", "aws", "google"].includes((provider || '').toLowerCase())) {
-      const langMatch = (voice || '').match(/^([a-z]{2}-[A-Z]{2})/);
-      if (langMatch) {
-        return langMatch[1];
-      }
-      const parts = (voice || '').split('-');
-      return parts.length > 1 ? parts[0].toUpperCase() : (voice || '').substring(0, 3).toUpperCase();
+    // Special handling based on provider
+    switch ((provider || '').toLowerCase()) {
+      case 'elevenlabs':
+        return voice;
+      case 'azure':
+        return voice.split('-')[0]; // Show just the language code for Azure
+      default:
+        return voice;
     }
-    return voice;
   }
 }

@@ -7,8 +7,11 @@ import { ModalOutletComponent } from '../../shared/modal-outlet.component';
   selector: 'app-root',
   standalone: true,
   imports: [RouterOutlet, ModalOutletComponent],
-  templateUrl: './app.component.html',
-  styleUrl: './app.component.scss'
+  template: `
+    <router-outlet></router-outlet>
+    <app-modal-outlet />
+  `,
+  styles: []
 })
 export class AppComponent {
   title = 'AI-TTS-MP3';

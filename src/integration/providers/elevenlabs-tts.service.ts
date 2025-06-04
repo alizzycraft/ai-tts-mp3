@@ -47,6 +47,14 @@ export interface ElevenLabsModel {
   }[];
 }
 
+// Voice settings interface for ElevenLabs
+export interface ElevenLabsSettings extends TTSSettings {
+  stability?: number;
+  similarityBoost?: number;
+  style?: number;
+  useSpeakerBoost?: boolean;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -341,12 +349,11 @@ export class ElevenLabsTTSService {
   private async makeTextToSpeechRequest(text: string, settings: TTSSettings): Promise<Uint8Array> {
     const payload = {
       text,
-      model_id: settings.model || 'eleven_monolingual_v1',
-      voice_settings: {
-        stability: (settings as any).stability || 0.5,
-        similarity_boost: (settings as any).similarityBoost || 0.75,
-        style: (settings as any).style || 0,
-        use_speaker_boost: (settings as any).useSpeakerBoost || true
+      model_id: settings.model || 'eleven_monolingual_v1',      voice_settings: {
+        stability: (settings as ElevenLabsSettings).stability || 0.5,
+        similarity_boost: (settings as ElevenLabsSettings).similarityBoost || 0.75,
+        style: (settings as ElevenLabsSettings).style || 0,
+        use_speaker_boost: (settings as ElevenLabsSettings).useSpeakerBoost || true
       }
     };
 

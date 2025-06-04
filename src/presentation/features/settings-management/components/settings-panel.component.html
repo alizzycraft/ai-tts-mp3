@@ -1,9 +1,8 @@
 <!-- Settings Panel Component -->
-<div class="settings-panel">
+<div class="settings-panel" role="complementary" aria-label="Settings Panel">
   <!-- App Header -->
   <div class="app-header">
-    <h2 class="app-title">
-      <img src="assets/icons/outline/microphone.svg" width="20" height="20" class="inline-icon" alt="Microphone icon">
+    <h2 class="app-title">      <img src="assets/icons/outline/microphone.svg" width="20" height="20" class="inline-icon" aria-hidden="true" alt="AI-TTS-MP3 logo">
       AI-TTS-MP3
     </h2>
     <p class="app-subtitle">Text to MP3 conversion</p>
@@ -73,27 +72,22 @@
 
     <!-- Metrics Toggle -->
     <div class="settings-section">
-      <div class="toggle-setting">
-        <label class="toggle-label">
-          <img src="assets/icons/outline/chart-bar.svg" width="18" height="18" class="inline-icon" alt="Metrics icon">
-          Enable Metrics Collection
-        </label>
+      <div class="toggle-setting" role="group" aria-labelledby="metrics-label">
+        <span id="metrics-label" class="toggle-label">Enable Metrics Collection</span>
         <div class="toggle-container">
           <input 
             type="checkbox"
             id="metrics-toggle"
             [checked]="enableMetrics()"
             (change)="toggleMetrics($event)"
+            aria-labelledby="metrics-label"
             class="toggle-input">
-          <label for="metrics-toggle" class="toggle-label">
-            <span class="toggle-icon" [class.toggle-on]="enableMetrics()">
-              @if (enableMetrics()) {
-                <img src="assets/icons/filled/toggle-right.svg" width="24" height="24" alt="Enabled">
-              } @else {
-                <img src="assets/icons/filled/toggle-left.svg" width="24" height="24" alt="Disabled">
-              }
-            </span>
-          </label>
+          <div class="toggle-icon" [class.toggle-on]="enableMetrics()" aria-hidden="true">
+            @if (enableMetrics()) {              <img src="assets/icons/filled/toggle-right.svg" width="24" height="24" alt="Metrics collection enabled">
+            } @else {
+              <img src="assets/icons/filled/toggle-left.svg" width="24" height="24" alt="Metrics collection disabled">
+            }
+          </div>
         </div>
       </div>
     </div>

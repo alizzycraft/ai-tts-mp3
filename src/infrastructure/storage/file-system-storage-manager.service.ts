@@ -2,7 +2,7 @@
 import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { FileSystemOperationsService } from './file-system-operations.service';
-import { StorageStateService, FolderReconnectionPrompt } from './storage-state.service';
+import { StorageStateService } from './storage-state.service';
 import { StorageMigrationService } from './storage-migration.service';
 import { HistoryManagementService } from './history-management.service';
 
@@ -28,8 +28,7 @@ export class FileSystemStorageManagerService {
 
   /**
    * Initialize service and check for previous folder state (Browser only)
-   */
-  async initializeService(): Promise<{ success: boolean; waitingForUser?: boolean }> {
+   */  async initializeService(): Promise<{ success: boolean; waitingForUser?: boolean }> {
     // Add a guard to prevent multiple initializations
     if (this.initialized) {
       console.debug('[FileSystemStorageManagerService] Already initialized');
@@ -45,37 +44,51 @@ export class FileSystemStorageManagerService {
       console.debug('[FileSystemStorageManagerService] Starting initialization...');
       this.initialized = true;
       
-      // Initialize storage state with File System API support detection
+      // Check file system support first
       const isSupported = this.fileSystemOperations.isFileSystemAccessSupported();
+      
+      // Clear the reconnection prompt before initializing state
+      this.storageState.clearFolderReconnectionPrompt();
+      
+      // Initialize storage state (this loads saved state)
       this.storageState.initializeState(isSupported);
       
-      // Load persistent state
-      await this.storageState.loadStorageState();
-
-      // Get previous folder state for reconnection hint
+      // Check for reconnection after loading state
       const folderState = this.storageState.getPreviousFolderState();
-      const fsState = this.storageState.getFileSystemState();
+      const fsState = this.storageState.fileSystemState();
 
-      // Only log in debug mode to avoid noise
       console.debug('[FileSystemStorageManagerService] State loaded:', {
         isSupported,
         hasStorageState: !!fsState,
-        hasFolderState: !!folderState
+        hasFolderState: !!folderState,
+        previousPath: folderState?.selectedPath
       });
 
-      // Prompt if any prior path exists
+      // Set reconnection prompt if needed
       const promptPath = folderState?.selectedPath || fsState?.selectedPath;
       if (isSupported && promptPath) {
-        console.debug('[FileSystemStorageManagerService] Will prompt to reconnect folder:', promptPath);
-        this.storageState.setFolderReconnectionPrompt({ previousPath: promptPath, shouldPrompt: true });
-        return { success: true, waitingForUser: true }; // Indicate that we're waiting for user response
+        console.debug('[FileSystemStorageManagerService] Setting reconnection prompt for:', promptPath);
+        
+        // Set the prompt and verify it was set
+        this.storageState.setFolderReconnectionPrompt({
+          previousPath: promptPath,
+          shouldPrompt: true
+        });
+
+        // Verify prompt was set
+        const promptSet = this.storageState.folderReconnectionPrompt();
+        console.debug('[FileSystemStorageManagerService] Reconnection prompt state:', promptSet);
+
+        if (promptSet) {
+          return { success: true, waitingForUser: true };
+        }
       }
 
-      // Load history if we don't need to prompt
+      // If no prompt needed or prompt wasn't set, load history normally
       console.debug('[FileSystemStorageManagerService] Loading history normally...');
       await this.historyManagement.loadHistory();
-
       return { success: true };
+
     } catch (error) {
       console.error('[FileSystemStorageManagerService] Error during initialization:', error);
       return { success: false };
@@ -84,20 +97,15 @@ export class FileSystemStorageManagerService {
 
   /**
    * Handle folder reconnection prompt
-   */
-  async handleFolderReconnection(reconnect: boolean): Promise<void> {
+   */  async handleFolderReconnection(reconnect: boolean): Promise<void> {
     if (!this.isBrowser) return;
 
-    // Get current prompt value by subscribing once
-    let prompt: FolderReconnectionPrompt | null = null;
-    const subscription = this.storageState.folderReconnectionPrompt$.subscribe(value => {
-      prompt = value;
-    });
-    subscription.unsubscribe();
-    
-    if (!prompt) return;
-
-    this.storageState.clearFolderReconnectionPrompt();
+    // Get current prompt value directly from signal
+    const prompt = this.storageState.folderReconnectionPrompt();
+    if (!prompt) return;    // For reconnect=false, clear the prompt immediately
+    if (!reconnect) {
+      this.storageState.clearFolderReconnectionPrompt();
+    }
 
     if (reconnect) {
       // User wants to reconnect, show directory picker
@@ -108,16 +116,24 @@ export class FileSystemStorageManagerService {
           // Failed to reconnect, fall back to localStorage
           console.log('[FileSystemStorageManagerService] Failed to reconnect, falling back to localStorage');
           this.storageState.clearPreviousFolderState();
+          // Ensure file system is disabled
+          this.storageState.updateFileSystemState({
+            isEnabled: false,
+            directoryHandle: null,
+            selectedPath: null
+          });
         }
       } catch (error) {
         console.error('[FileSystemStorageManagerService] Error during reconnection:', error);
         this.storageState.clearPreviousFolderState();
       }
     } else {
-      // User declined, clear the previous folder state
-      console.log('[FileSystemStorageManagerService] User declined reconnection, clearing previous folder state');
+      // User declined, clear the previous folder state        console.log('[FileSystemStorageManagerService] User declined reconnection, clearing previous folder state');
       this.storageState.clearPreviousFolderState();
     }
+
+    // Always clear the reconnection prompt after handling
+    this.storageState.clearFolderReconnectionPrompt();
 
     // Load from localStorage
     console.log('[FileSystemStorageManagerService] Loading from localStorage after folder reconnection handling');
@@ -133,49 +149,41 @@ export class FileSystemStorageManagerService {
     try {
       console.log('[FileSystemStorageManagerService] Enabling file system storage...');
 
-      // Clear existing history before switching storage modes
-      this.historyManagement.clearHistoryInMemory();
-
-      // Get previous folder state for reconnection hint
-      const previousFolderState = this.storageState.getPreviousFolderState();
+      // Update state immediately to indicate we're in file system mode
+      this.storageState.updateFileSystemState({
+        isEnabled: true,
+        isSupported: this.fileSystemOperations.isFileSystemAccessSupported()
+      });
 
       // Show directory picker
       const handle = await this.fileSystemOperations.selectDirectory({
         isReconnection,
-        previousPath: previousFolderState?.selectedPath
+        previousPath: this.storageState.getPreviousFolderState()?.selectedPath
       });
 
-      // Update storage state
+      // Update storage state with selected folder
       this.storageState.updateFileSystemState({
-        isEnabled: true,
         directoryHandle: handle,
         selectedPath: handle.name
       });
 
-      await this.storageState.saveStorageState();
+      // Save state immediately
+      this.storageState.saveStorageState();
       this.storageState.saveFolderState();
 
-      try {
-        // Try to load existing history from the selected folder
-        const fileSystemHistory = await this.migration.loadFromFileSystem(handle);
-        await this.historyManagement.setHistory(fileSystemHistory);
+      // Load history after state is updated
+      const fileSystemHistory = await this.migration.loadFromFileSystem(handle);
+      await this.historyManagement.setHistory(fileSystemHistory);
 
-        if (!isReconnection && fileSystemHistory.length === 0) {
-          // If this is a new folder and it's empty, try to migrate localStorage history
-          const migratedHistory = await this.migration.migrateFromLocalStorage(handle);
-          if (migratedHistory.length > 0) {
-            await this.historyManagement.setHistory(migratedHistory);
-          }
+      if (!isReconnection && fileSystemHistory.length === 0) {
+        const migratedHistory = await this.migration.migrateFromLocalStorage(handle);
+        if (migratedHistory.length > 0) {
+          await this.historyManagement.setHistory(migratedHistory);
         }
-      } catch (error) {
-        // Keep history empty on error
-        await this.historyManagement.setHistory([]);
-        console.error('[FileSystemStorageManagerService] Error loading from file system:', error);
-      }
-
-      console.log('[FileSystemStorageManagerService] File system storage enabled successfully');
+      }      console.log('[FileSystemStorageManagerService] File system storage enabled successfully');
+      // Clear reconnection prompt after successful enablement
+      this.storageState.clearFolderReconnectionPrompt();
       return { success: true };
-
     } catch (error: unknown) {
       // Reset state on error
       await this.historyManagement.setHistory([]);
@@ -247,7 +255,7 @@ export class FileSystemStorageManagerService {
    * Get the current folder name if file system storage is enabled
    */
   getCurrentFolderName(): string | null {
-    const state = this.storageState.getFileSystemState();
+    const state = this.storageState.fileSystemState();
     return state.isEnabled ? state.selectedPath : null;
   }
 
@@ -255,7 +263,7 @@ export class FileSystemStorageManagerService {
    * Check if file system storage is currently enabled
    */
   isFileSystemStorageEnabled(): boolean {
-    const state = this.storageState.getFileSystemState();
+    const state = this.storageState.fileSystemState();
     return state.isEnabled && !!state.directoryHandle;
   }
 }

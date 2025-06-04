@@ -1,5 +1,8 @@
 /* Global Styles for AI-TTS-MP3 App - Developer Theme */
 
+// Import accessibility styles
+@use './styles/accessibility.scss' as *;
+
 * {
   margin: 0;
   padding: 0;
