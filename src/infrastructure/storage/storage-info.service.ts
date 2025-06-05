@@ -13,7 +13,6 @@ export class StorageInfoService {
   private lastUpdateTime = 0;
   private readonly UPDATE_THRESHOLD_MS = 100; // Minimum time between updates
 
-  // Replace BehaviorSubject with signal
   private readonly _storageInfo = signal<StorageInfo>({
     used: 0,
     available: 0,

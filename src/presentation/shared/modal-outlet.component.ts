@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, ChangeDetectionStrategy, HostListener, AfterViewInit, ElementRef } from '@angular/core';
-import { ModalService } from '../../integration/modal.service';
+import { ModalService } from './modal.service';
 import { ReconnectionPromptModalComponent } from './reconnection-prompt-modal.component';
 
 @Component({

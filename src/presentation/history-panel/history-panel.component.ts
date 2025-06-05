@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HISTORY_STORAGE_TOKEN } from '../../integration/tokens';
 import { IHistoryStorage } from '../../integration/interfaces';
-import { ModalService } from '../../integration/modal.service';
+import { ModalService } from '../shared/modal.service';
 import { HistoryListAreaComponent } from './components/history-list-area/history-list-area.component';
 import { StorageInfoComponent } from './components/storage-info/storage-info.component';
 import { FileSystemManagerComponent } from './components/file-system-manager/file-system-manager.component';

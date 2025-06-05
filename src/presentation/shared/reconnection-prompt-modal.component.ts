@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ModalService } from '../../integration/modal.service';
+import { ModalService } from './modal.service';
 import { IntegratedHistoryStorageService } from '../../integration/history-storage.service';
 import { FolderReconnectionPrompt } from '../../integration/domain-types';
 

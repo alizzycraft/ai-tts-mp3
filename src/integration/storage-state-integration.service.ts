@@ -1,7 +1,7 @@
 // Storage State Integration Service - Coordinates storage state with UI concerns
 import { Injectable, inject } from '@angular/core';
 import { StorageStateService } from '../infrastructure/storage/storage-state.service';
-import { ModalService } from './modal.service';
+import { ModalService } from '../presentation/shared/modal.service';
 import { FolderReconnectionPrompt, FileSystemStorageState } from '../infrastructure/domain-types';
 
 @Injectable({
