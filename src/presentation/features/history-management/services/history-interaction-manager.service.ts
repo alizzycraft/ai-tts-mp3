@@ -101,9 +101,8 @@ export class HistoryInteractionManagerService implements OnDestroy {
       console.error('[HistoryInteractionManager] Error auto-selecting new item:', error);
     });
   }
-
   /**
-   * Handle playing a history item (select and play)
+   * Handle playing a history item (play only, don't select)
    */  async playHistoryItem(item: HistoryItem): Promise<void> {
     try {
       console.log('[HistoryInteractionManager] Playing history item:', item.id);
@@ -127,26 +126,29 @@ export class HistoryInteractionManagerService implements OnDestroy {
         return;
       }
 
-      // First select the item to set it as current and load audio
-      console.log('[HistoryInteractionManager] Selecting history item:', item.id);
-      
-      // Update selection state first for reactivity
-      this.selectedHistoryItem.set(item);
-      
-      // Update query info immediately
-      this.updateQueryInfoFromHistoryItem(item);
-      
-      // Verify we have audio data and explicitly load it
+      // Verify we have audio data before attempting to play
       if (!item.result?.audioData) {
         console.error('[HistoryInteractionManager] Cannot play item - no audio data available');
         return;
       }
       
+      // Update query info but DON'T update selectedHistoryItem
+      // This allows playback without selection in the editor
+      this.currentQueryInfo.set({
+        text: item.text,
+        title: item.metadata?.title,
+        settings: item.settings,
+        createdAt: item.createdAt,
+        id: item.id,
+        audioSize: item.audioSize
+      });
+      
       // Load the audio data first to ensure it's ready
+      console.log('[HistoryInteractionManager] Loading audio for item:', item.id);
       await this.playbackService.loadAudio(item.result, item.id);
       
       console.log('[HistoryInteractionManager] Audio loaded, playing now');
-      // Play the loaded audio directly instead of using togglePlayPause
+      // Play the loaded audio directly
       this.playbackService.play();
 
       console.log('[HistoryInteractionManager] History item playback started');
