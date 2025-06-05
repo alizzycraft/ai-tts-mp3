@@ -76,13 +76,12 @@ export class HistoryPanelComponent {
   });
 
   readonly showStorageBar = computed(() => !this.fileSystem().isEnabled);
-
   readonly storageInfo = computed(() => {
     const storage = this.storage();
     const fileSystem = this.fileSystem();
     const items = this.historyItems();
 
-    return {
+    const info = {
       used: storage.used,
       available: storage.available,
       isFileSystem: fileSystem.isEnabled,
@@ -90,6 +89,11 @@ export class HistoryPanelComponent {
       itemCount: items.length,
       folderName: fileSystem.selectedPath || undefined
     };
+    
+    console.log('[HistoryPanel] Storage info computed with fileSystem.isEnabled:', 
+      fileSystem.isEnabled, 'fileSystem.selectedPath:', fileSystem.selectedPath);
+    
+    return info;
   });
 
   constructor(
@@ -135,13 +139,20 @@ export class HistoryPanelComponent {
       this.historyService.enableFileSystemStorage();
     }
   }
-
-  onChangeFolder(): void {
-    this.historyService.enableFileSystemStorage();
+  async onChangeFolder(): Promise<void> {
+    console.log('[HistoryPanel] Changing folder, current item count:', this.historyItems().length);
+    const result = await this.historyService.enableFileSystemStorage();
+    console.log('[HistoryPanel] Change folder operation completed, result:', result, 'new item count:', this.historyItems().length);
   }
 
-  onReconnectConfirm(shouldReconnect: boolean): void {
-    this.historyService.handleFolderReconnection(shouldReconnect);
+  async onReconnectConfirm(shouldReconnect: boolean): Promise<void> {
+    console.log('[HistoryPanel] Reconnection confirmation:', shouldReconnect, 'Current fileSystem state:', this.fileSystem());
+    
+    await this.historyService.handleFolderReconnection(shouldReconnect);
+    
+    // Log state after reconnection to debug UI updates
+    console.log('[HistoryPanel] After reconnection - fileSystem state:', this.fileSystem());
+    console.log('[HistoryPanel] After reconnection - storageInfo:', this.storageInfo());
   }
 
   deleteItem(item: HistoryItem): void {
@@ -162,8 +173,19 @@ export class HistoryPanelComponent {
     this._showDeleteModal.set(false);
     this._itemToDelete.set(null);
   }
-
+  // Show the confirmation modal before clearing all history
   onClearAllConfirm(): void {
+    // First check if we have any history to clear
+    if (this.historyItems().length === 0) {
+      return; // Nothing to clear
+    }
+    
+    // Show the confirmation modal
+    this._showClearModal.set(true);
+  }
+
+  // Actually confirm and perform the clear operation
+  confirmClearAll(): void {
     this.historyService.clearHistory();
     this._showClearModal.set(false);
   }

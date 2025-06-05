@@ -69,14 +69,17 @@ export class StorageStateService {
       }
     }
   }
-
   // Update file system state
   updateFileSystemState(updates: Partial<FileSystemStorageState>): void {
     if (!this.isBrowser) return;
 
+    console.log('[StorageState] Updating file system state with:', updates);
+    
     // Merge updates with current state atomically
     this._fileSystemState.update(current => {
       const newState = { ...current, ...updates };
+      console.log('[StorageState] New state after update:', newState);
+      
       // Save state immediately on significant changes
       if (updates.isEnabled !== undefined || updates.selectedPath !== undefined) {
         this.saveFolderState();

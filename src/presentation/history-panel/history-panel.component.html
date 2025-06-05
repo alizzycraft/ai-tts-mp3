@@ -41,7 +41,6 @@
     </h2>
     <p class="app-subtitle">Generated speech will appear here</p>
   </div>
-
   <!-- Storage Info Component -->
   <app-storage-info
     [storageInfo]="storageInfo()"
@@ -50,6 +49,11 @@
     (toggleFileSystem)="onToggleStorage()"
     (changeFolder)="onChangeFolder()">
   </app-storage-info>
+  <!-- Debug info to verify state - can be removed when fixed -->
+  <div style="display: none;">
+    FileSystem enabled: {{fileSystem().isEnabled}}
+    Folder: {{fileSystem().selectedPath}}
+  </div>
   <!-- File System Manager Component -->
   <app-file-system-manager
     [state]="fileSystem()"
@@ -131,10 +135,9 @@
           </div>
           <p>Are you sure you want to clear all history?</p>
           <p>This action cannot be undone.</p>
-        </div>
-        <div class="modal-footer">
+        </div>        <div class="modal-footer">
           <button class="modal-btn secondary" (click)="cancelClearAll()">Cancel</button>
-          <button class="modal-btn danger" (click)="onClearAllConfirm()">Clear All</button>
+          <button class="modal-btn danger" (click)="confirmClearAll()">Clear All</button>
         </div>
       </div>
     </div>

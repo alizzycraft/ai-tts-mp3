@@ -3,7 +3,7 @@
   background: #0d1117;
   border-left: 1px solid #21262d;
   height: 100vh;
-  overflow: hidden; // Changed from overflow-y: auto to prevent scrolling the entire panel
+  overflow: hidden;
   width: 320px;
   min-width: 320px;
   max-width: 320px;
@@ -742,7 +742,10 @@
   flex-shrink: 0;
   min-height: 48px;
   max-height: 56px;
-  margin-top: 0;
+  margin-top: auto; // Push footer to bottom when content is short
+  position: sticky; // Make it sticky at the bottom
+  bottom: 0;       // Stick to bottom
+  z-index: 10;     // Ensure it's above other content
 }
 
 .footer-content {
