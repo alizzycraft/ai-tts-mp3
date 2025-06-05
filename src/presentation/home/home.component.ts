@@ -11,9 +11,9 @@ import { FormatFileSizePipe } from '../shared/pipes/format-file-size.pipe';
 import { HistoryItem } from '../../integration/history-storage.service';
 
 // Import focused services
-import { TTSGenerationManagerService, GenerationResult } from '../features/tts-generation/services/tts-generation-manager.service';
-import { HistoryInteractionManagerService } from '../features/history-management/services/history-interaction-manager.service';
-import { SettingsIntegrationManagerService } from '../features/settings-management/services/settings-integration-manager.service';
+import { TTSGenerationManagerService, GenerationResult } from '../home/services/tts-generation-manager.service';
+import { HistoryInteractionManagerService } from '../home/services/history-interaction-manager.service';
+import { SettingsIntegrationManagerService } from '../home/services/settings-integration-manager.service';
 
 @Component({
   selector: 'app-home',

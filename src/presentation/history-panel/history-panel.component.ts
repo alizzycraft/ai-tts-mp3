@@ -8,7 +8,7 @@ import { HistoryListAreaComponent } from './components/history-list-area/history
 import { StorageInfoComponent } from './components/storage-info/storage-info.component';
 import { FileSystemManagerComponent } from './components/file-system-manager/file-system-manager.component';
 import { HistoryItem } from '../../integration/domain-types';
-import { HistoryInteractionManagerService } from '../features/history-management/services/history-interaction-manager.service';
+import { HistoryInteractionManagerService } from '../home/services/history-interaction-manager.service';
 
 @Component({
   selector: 'app-history-panel',

@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, ChangeDetectionStrategy, HostListener, AfterViewInit, ElementRef } from '@angular/core';
 import { ModalService } from './modal.service';
-import { ReconnectionPromptModalComponent } from '../presentation/features/history-management/components/reconnection-prompt-modal/reconnection-prompt-modal.component';
+import { ReconnectionPromptModalComponent } from '../presentation/shared/reconnection-prompt-modal.component';
 
 @Component({
   selector: 'app-modal-outlet',

@@ -19,10 +19,6 @@ export const routes: Routes = [
     path: '',
     component: HomeComponent,
     title: 'Home - AI-TTS-MP3 App'
-  },    {
-    path: 'settings',
-    loadComponent: () => import('../../presentation/features/settings-management/components/settings-panel.component').then(m => m.SettingsPanelComponent),
-    title: 'Settings - AI-TTS-MP3 App'
   },
   {
     path: 'history',
