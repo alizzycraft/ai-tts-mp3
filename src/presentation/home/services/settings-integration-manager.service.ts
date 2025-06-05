@@ -1,7 +1,7 @@
 // Settings Integration Manager - handles settings loading and coordination
 import { Injectable, inject } from '@angular/core';
 import { AngularTTSService } from '../../../integration/angular-tts.service';
-import { SettingsService } from '../../shared/settings.service';
+import { SettingsService } from '../../../integration/settings.service';
 import { Voice } from '../../../integration/domain-types';
 
 @Injectable({

@@ -2,7 +2,7 @@
 import { Injectable, signal, computed, inject } from '@angular/core';
 import { AngularTTSService } from '../../../integration/angular-tts.service';
 import { IntegratedHistoryStorageService } from '../../../integration/history-storage.service';
-import { SettingsService } from '../../shared/settings.service';
+import { SettingsService } from '../../../integration/settings.service';
 import { PlaybackService } from '../../../integration/playback.service';
 import { 
   TTSSettings, 

@@ -5,9 +5,9 @@ import { HistoryPanelComponent } from '../history-panel/history-panel.component'
 import { SettingsPanelComponent } from '../settings-panel/settings-panel.component';
 import { EditorComponent } from '../editor/editor.component';
 import { AudioPlayerComponent } from '../audio-player/audio-player.component';
-import { TruncateTextPipe } from '../shared/pipes/truncate-text.pipe';
-import { FormatDatePipe } from '../shared/pipes/format-date.pipe';
-import { FormatFileSizePipe } from '../shared/pipes/format-file-size.pipe';
+import { TruncateTextPipe } from '../../common/truncate-text.pipe';
+import { FormatDatePipe } from '../../common/format-date.pipe';
+import { FormatFileSizePipe } from '../../common/format-file-size.pipe';
 import { HistoryItem } from '../../integration/history-storage.service';
 
 // Import focused services

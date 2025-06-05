@@ -1,12 +1,12 @@
 import { Component, computed, input, output, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TTSResult, ModelProvider, Voice, HistoryItem } from '../../integration/domain-types';
-import { FormatDatePipe } from '../shared/pipes/format-date.pipe';
-import { FormatDurationPipe } from '../shared/pipes/format-duration.pipe';
-import { TruncateTextPipe } from '../shared/pipes/truncate-text.pipe';
+import { FormatDatePipe } from '../../common/format-date.pipe';
+import { FormatDurationPipe } from '../../common/format-duration.pipe';
+import { TruncateTextPipe } from '../../common/truncate-text.pipe';
 import { PlaybackService } from '../../integration/playback.service';
 import { AngularTTSService } from '../../integration/angular-tts.service';
-import { SettingsService } from '../shared/settings.service';
+import { SettingsService } from '../../integration/settings.service';
 
 // Define a type for currentQueryInfo
 interface CurrentQueryInfo {

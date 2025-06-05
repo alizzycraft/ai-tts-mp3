@@ -1,7 +1,7 @@
 import { Injectable, signal, computed, Inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { ModelProvider, Voice } from '../../integration/domain-types';
-import { PROVIDER_FLAGS } from '../../integration/provider-flags';
+import { ModelProvider, Voice } from './domain-types';
+import { PROVIDER_FLAGS } from './provider-flags';
 
 @Injectable({
   providedIn: 'root'

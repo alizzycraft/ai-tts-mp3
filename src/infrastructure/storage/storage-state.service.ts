@@ -1,7 +1,6 @@
 // Storage State Management Service - Manages storage state and configuration
 import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { ModalService } from '../../shared/modal.service';
 import { FileSystemStorageState, FolderReconnectionPrompt } from '../domain-types';
 import { signal, computed } from '@angular/core';
 
@@ -27,14 +26,13 @@ export class StorageStateService {
 
   // Add error state signal
   private readonly _stateError = signal<string | null>(null);
-
   // Public readonly signals
   readonly fileSystemState = computed(() => this._fileSystemState());
   readonly folderReconnectionPrompt = computed(() => this._folderReconnectionPrompt());
   readonly stateError = computed(() => this._stateError());
+  
   constructor(
-    @Inject(PLATFORM_ID) private platformId: object,
-    private modalService: ModalService
+    @Inject(PLATFORM_ID) private platformId: object
   ) {}
 
   /** true only when running in a browser (not during SSR) */
@@ -80,19 +78,9 @@ export class StorageStateService {
       }
       return newState;
     });
-  }
-  // Set the reconnection prompt and show modal if needed
+  }  // Set the reconnection prompt - just stores state, no UI interaction
   setFolderReconnectionPrompt(prompt: FolderReconnectionPrompt | null): void {
     this._folderReconnectionPrompt.set(prompt);
-    
-    if (prompt?.shouldPrompt) {
-      this.modalService.showComponent({
-        type: 'component',
-        componentType: 'ReconnectionPromptModal',
-        data: prompt,
-        allowDismiss: false
-      });
-    }
 
     // Verify the update
     const currentPrompt = this._folderReconnectionPrompt();

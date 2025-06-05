@@ -1,7 +1,7 @@
 import { Component, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { SettingsService } from '../shared/settings.service';
+import { SettingsService } from '../../integration/settings.service';
 import { ModelProvider, Voice } from '../../integration/domain-types';
 
 @Component({

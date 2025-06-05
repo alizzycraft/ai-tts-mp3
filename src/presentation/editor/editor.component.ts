@@ -2,7 +2,7 @@ import { Component, computed, inject, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AngularTTSService } from '../../integration/angular-tts.service';
-import { SettingsService } from '../shared/settings.service';
+import { SettingsService } from '../../integration/settings.service';
 import { TTSResult, TTSResultStatus, TTSSettings, ApiKey } from '../../integration/domain-types';
 
 

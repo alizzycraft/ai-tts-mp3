@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ModalService } from '../../shared/modal.service';
+import { ModalService } from '../../integration/modal.service';
 import { IntegratedHistoryStorageService } from '../../integration/history-storage.service';
 import { FolderReconnectionPrompt } from '../../integration/domain-types';
 
@@ -79,12 +79,11 @@ export class ReconnectionPromptModalComponent {
   }
   error = signal<string | null>(null);
   reconnecting = signal(false);
-
   async reconnect() {
     this.reconnecting.set(true);
     this.error.set(null);
     try {
-      const result = await this.historyService.enableFileSystemStorage();
+      const result: { success: boolean; error?: string } = await this.historyService.enableFileSystemStorage();
       if (result.success) {
         this.modalService.close(true);
       } else {

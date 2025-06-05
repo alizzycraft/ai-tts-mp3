@@ -90,6 +90,15 @@ module.exports = tseslint.config(
         "error",
         {
           zones: [
+            // Global rule: All src files can only import from the 6 defined layers
+            {
+              target: "./src/**/*",
+              from: [
+                "./src/!(common|domain|enactment|infrastructure|integration|presentation)/**",
+                "./src/!(common|domain|enactment|infrastructure|integration|presentation)/*"
+              ],
+              message: "Files in src/ can only import from the 6 defined architectural layers: common, domain, enactment, infrastructure, integration, presentation.",
+            },
             {
               target: "./src/common",
               from: [ // Common can import nothing
@@ -139,8 +148,8 @@ module.exports = tseslint.config(
               from: [  
                 "./src/domain",
                 "./src/enactment",
-                "./src/infrastructure"], // Presentation can import from common and integration
-              message: "Presentation layer can import from any other layer.",
+                "./src/infrastructure"], // Presentation can only import from common and integration
+              message: "Presentation layer can only import from Common and Integration layers.",
             },
           ],
         },

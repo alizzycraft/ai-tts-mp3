@@ -1,6 +1,6 @@
 import { Component, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormatFileSizePipe } from '../../../shared/pipes/format-file-size.pipe';
+import { FormatFileSizePipe } from '../../../../common/format-file-size.pipe';
 
 @Component({
   selector: 'app-storage-info',

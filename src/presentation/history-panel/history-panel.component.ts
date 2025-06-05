@@ -3,11 +3,11 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HISTORY_STORAGE_TOKEN } from '../../integration/tokens';
 import { IHistoryStorage } from '../../integration/interfaces';
-import { ModalService } from '../../shared/modal.service';
+import { ModalService } from '../../integration/modal.service';
 import { HistoryListAreaComponent } from './components/history-list-area/history-list-area.component';
 import { StorageInfoComponent } from './components/storage-info/storage-info.component';
 import { FileSystemManagerComponent } from './components/file-system-manager/file-system-manager.component';
-import { HistoryItem } from '../../integration/domain-types';
+import { HistoryItem, FolderReconnectionPrompt } from '../../integration/domain-types';
 import { HistoryInteractionManagerService } from '../home/services/history-interaction-manager.service';
 
 @Component({
@@ -87,12 +87,51 @@ export class HistoryPanelComponent {
       itemCount: items.length,
       folderName: fileSystem.selectedPath || undefined
     };
-  });
-
-  constructor(
+  });  constructor(
     @Inject(HISTORY_STORAGE_TOKEN) private historyService: IHistoryStorage,
     private modalService: ModalService
-  ) {}
+  ) {
+    // Set up signal monitoring for reconnection prompts
+    // This will monitor the signal value and show modal when needed
+    this.monitorReconnectionPrompt();
+  }
+
+  private monitorReconnectionPrompt(): void {
+    // Check for existing prompt immediately
+    const currentPrompt = this.promptSignal();
+    if (currentPrompt?.shouldPrompt) {
+      this.showReconnectionModal(currentPrompt);
+    }
+    
+    // Monitor for future changes by setting up a signal subscription pattern
+    // Since we're signal-first, we'll use a simple interval check
+    // This is better than effects for this architectural pattern
+    let lastPromptState: FolderReconnectionPrompt | null = currentPrompt;
+    
+    const checkPromptChanges = () => {
+      const newPrompt = this.promptSignal();
+      
+      // Check if prompt state changed and we need to show modal
+      if (newPrompt?.shouldPrompt && 
+          (!lastPromptState || !lastPromptState.shouldPrompt)) {
+        this.showReconnectionModal(newPrompt);
+      }
+      
+      lastPromptState = newPrompt;
+    };
+    
+    // Check every 500ms for prompt changes
+    setInterval(checkPromptChanges, 500);
+  }
+
+  private showReconnectionModal(prompt: FolderReconnectionPrompt): void {
+    this.modalService.showComponent({
+      type: 'component',
+      componentType: 'ReconnectionPromptModal',
+      data: prompt,
+      allowDismiss: false
+    });
+  }
 
   // Event handlers
   onSearchQueryChange(query: string): void {
