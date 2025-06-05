@@ -44,7 +44,8 @@
         <img src="assets/icons/outline/download.svg" width="16" height="16" alt="Download">
       </button>
         <div class="right-metadata">
-        <span class="created-at-info" [title]="displayCreatedAt() | date:'medium'">{{ displayCreatedAt() | formatDate }}</span>
+        <span class="created-at-info" *ngIf="displayCreatedAt() && displayCreatedAt() !== '-'" [title]="displayCreatedAt() | date:'medium'">{{ displayCreatedAt() | formatDate }}</span>
+        <span class="created-at-info" *ngIf="!displayCreatedAt() || displayCreatedAt() === '-'">-</span>
         <span class="size-info">{{ displaySize() }}</span>
         <span class="duration-info">{{ playbackService.totalDuration() | formatDuration }}</span>
       </div>

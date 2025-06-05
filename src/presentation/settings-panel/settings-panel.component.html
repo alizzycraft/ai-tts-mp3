@@ -66,14 +66,26 @@
 
     <!-- API Key -->
     <div class="settings-section">
-      <label class="setting-label" for="api-key-input">API Key</label>
-      <input 
-        id="api-key-input"
-        type="password"
-        [ngModel]="apiKey()"
-        (ngModelChange)="updateApiKey($event)"
-        placeholder="Enter API Key"
-        class="setting-input">
+      <form (submit)="$event.preventDefault()">
+        <label class="setting-label" for="api-key-input">API Key</label>
+        <input
+          type="text"
+          name="username"
+          autocomplete="username"
+          tabindex="-1"
+          aria-hidden="true"
+          style="position:absolute; left:-9999px; width:1px; height:1px; opacity:0;"
+        >
+        <input 
+          id="api-key-input"
+          type="password"
+          [ngModel]="apiKey()"
+          (ngModelChange)="updateApiKey($event)"
+          [ngModelOptions]="{standalone: true}"
+          autocomplete="new-password"
+          placeholder="Enter API Key"
+          class="setting-input">
+      </form>
     </div>
   </div>
 
