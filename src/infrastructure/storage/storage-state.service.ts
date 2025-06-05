@@ -41,16 +41,13 @@ export class StorageStateService {
   private get isBrowser(): boolean {
     return isPlatformBrowser(this.platformId);
   }
-
   // Initialize storage state with support detection
   initializeState(isSupported: boolean): void {
     if (this.initialized) {
-      console.debug('[StorageState] Already initialized, skipping.');
       return;
     }
 
     this.initialized = true;
-    console.debug('[StorageState] Initializing storage state, filesystem support:', isSupported);
 
     if (this.isBrowser) {
       // First load any saved state
@@ -68,17 +65,13 @@ export class StorageStateService {
         });
       }
     }
-  }
-  // Update file system state
+  }  // Update file system state
   updateFileSystemState(updates: Partial<FileSystemStorageState>): void {
     if (!this.isBrowser) return;
-
-    console.log('[StorageState] Updating file system state with:', updates);
     
     // Merge updates with current state atomically
     this._fileSystemState.update(current => {
       const newState = { ...current, ...updates };
-      console.log('[StorageState] New state after update:', newState);
       
       // Save state immediately on significant changes
       if (updates.isEnabled !== undefined || updates.selectedPath !== undefined) {
@@ -88,14 +81,11 @@ export class StorageStateService {
       return newState;
     });
   }
-
   // Set the reconnection prompt and show modal if needed
   setFolderReconnectionPrompt(prompt: FolderReconnectionPrompt | null): void {
-    console.debug('[StorageState] Setting folder reconnection prompt:', prompt);
     this._folderReconnectionPrompt.set(prompt);
     
     if (prompt?.shouldPrompt) {
-      console.debug('[StorageState] Prompt activated, showing modal');
       this.modalService.showComponent({
         type: 'component',
         componentType: 'ReconnectionPromptModal',
@@ -106,7 +96,6 @@ export class StorageStateService {
 
     // Verify the update
     const currentPrompt = this._folderReconnectionPrompt();
-    console.debug('[StorageState] Current prompt state after update:', currentPrompt);
     
     if (prompt && (!currentPrompt || !currentPrompt.shouldPrompt)) {
       console.warn('[StorageState] Prompt not set correctly:', { 
@@ -116,21 +105,11 @@ export class StorageStateService {
     }
   }
   clearFolderReconnectionPrompt(): void {
-    console.debug('[StorageState] Clearing folder reconnection prompt');
     this.setFolderReconnectionPrompt(null);
   }
-
   // Add method to force prompt check
   verifyPromptState(): void {
-    const state = this._fileSystemState();
-    const prompt = this._folderReconnectionPrompt();
-    console.debug('[StorageState] Current prompt and state:', {
-      state: {
-        isEnabled: state.isEnabled,
-        selectedPath: state.selectedPath
-      },
-      prompt
-    });
+    // No action needed - this method can be empty after removing debug logs
   }
 
   // Current state getters
@@ -141,8 +120,6 @@ export class StorageStateService {
     if (!this.isBrowser || typeof localStorage === 'undefined') return;
 
     try {
-      console.debug('[StorageState] Loading storage state');
-      
       // Load storage state
       const stored = localStorage.getItem(this.STORAGE_STATE_KEY);
       if (stored) {
@@ -161,7 +138,6 @@ export class StorageStateService {
 
           // If we had a previously enabled state with a path, set up reconnection
           if (savedState.isEnabled && savedState.selectedPath) {
-            console.debug('[StorageState] Setting up reconnection for path:', savedState.selectedPath);
             this.setFolderReconnectionPrompt({
               previousPath: savedState.selectedPath,
               shouldPrompt: true

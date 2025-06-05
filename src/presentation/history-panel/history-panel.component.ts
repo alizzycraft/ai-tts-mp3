@@ -7,8 +7,7 @@ import { ModalService } from '../../shared/modal.service';
 import { HistoryListAreaComponent } from './components/history-list-area/history-list-area.component';
 import { StorageInfoComponent } from './components/storage-info/storage-info.component';
 import { FileSystemManagerComponent } from './components/file-system-manager/file-system-manager.component';
-import { PresentationHistoryItem } from '../shared/models/presentation-types';
-import { FolderReconnectionPrompt, HistoryItem } from '../../integration/domain-types';
+import { HistoryItem } from '../../integration/domain-types';
 import { HistoryInteractionManagerService } from '../features/history-management/services/history-interaction-manager.service';
 
 @Component({
@@ -75,13 +74,12 @@ export class HistoryPanelComponent {
     return 'normal';
   });
 
-  readonly showStorageBar = computed(() => !this.fileSystem().isEnabled);
-  readonly storageInfo = computed(() => {
+  readonly showStorageBar = computed(() => !this.fileSystem().isEnabled);  readonly storageInfo = computed(() => {
     const storage = this.storage();
     const fileSystem = this.fileSystem();
     const items = this.historyItems();
 
-    const info = {
+    return {
       used: storage.used,
       available: storage.available,
       isFileSystem: fileSystem.isEnabled,
@@ -89,11 +87,6 @@ export class HistoryPanelComponent {
       itemCount: items.length,
       folderName: fileSystem.selectedPath || undefined
     };
-    
-    console.log('[HistoryPanel] Storage info computed with fileSystem.isEnabled:', 
-      fileSystem.isEnabled, 'fileSystem.selectedPath:', fileSystem.selectedPath);
-    
-    return info;
   });
 
   constructor(
@@ -138,21 +131,12 @@ export class HistoryPanelComponent {
     } else {
       this.historyService.enableFileSystemStorage();
     }
-  }
-  async onChangeFolder(): Promise<void> {
-    console.log('[HistoryPanel] Changing folder, current item count:', this.historyItems().length);
-    const result = await this.historyService.enableFileSystemStorage();
-    console.log('[HistoryPanel] Change folder operation completed, result:', result, 'new item count:', this.historyItems().length);
+  }  async onChangeFolder(): Promise<void> {
+    await this.historyService.enableFileSystemStorage();
   }
 
   async onReconnectConfirm(shouldReconnect: boolean): Promise<void> {
-    console.log('[HistoryPanel] Reconnection confirmation:', shouldReconnect, 'Current fileSystem state:', this.fileSystem());
-    
     await this.historyService.handleFolderReconnection(shouldReconnect);
-    
-    // Log state after reconnection to debug UI updates
-    console.log('[HistoryPanel] After reconnection - fileSystem state:', this.fileSystem());
-    console.log('[HistoryPanel] After reconnection - storageInfo:', this.storageInfo());
   }
 
   deleteItem(item: HistoryItem): void {

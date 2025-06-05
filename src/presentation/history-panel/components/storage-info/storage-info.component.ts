@@ -1,4 +1,4 @@
-import { Component, input, output, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormatFileSizePipe } from '../../../shared/pipes/format-file-size.pipe';
 
@@ -9,7 +9,7 @@ import { FormatFileSizePipe } from '../../../shared/pipes/format-file-size.pipe'
   templateUrl: './storage-info.component.html',
   styleUrls: ['./storage-info.component.scss']
 })
-export class StorageInfoComponent implements OnChanges {  
+export class StorageInfoComponent {  
   storageInfo = input.required<{
     isFileSystem: boolean;
     folderName?: string;
@@ -22,11 +22,4 @@ export class StorageInfoComponent implements OnChanges {
   warningLevel = input.required<'normal' | 'warning' | 'critical'>();
   toggleFileSystem = output<void>();
   changeFolder = output<void>();
-  
-  ngOnChanges(changes: SimpleChanges): void {
-    // Monitor storage info changes to help debug UI updates
-    if (changes['storageInfo']) {
-      console.log('[StorageInfo] Storage info changed:', this.storageInfo());
-    }
-  }
 }
