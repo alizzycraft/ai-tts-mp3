@@ -112,11 +112,11 @@ export class HistoryPanelComponent {
       console.error('[HistoryPanel] Error selecting item:', error);
     }
   }
-
   async onPlayItemClick(item: HistoryItem): Promise<void> {
     try {
+      // Just call the historyInteractionManager to handle the playback directly
+      // No need to emit an event as we're handling it here
       await this.historyInteractionManager.playHistoryItem(item);
-      this.playItem.emit(item);
     } catch (error) {
       console.error('[HistoryPanel] Error playing item:', error);
     }

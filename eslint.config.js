@@ -80,7 +80,7 @@ module.exports = tseslint.config(
           "format": ["camelCase"],
           "failureMessage": "Avoid non-reactive pattern names in signal-based code",
           "filter": {
-            "regex": "^(effect|subscribe|observe|promise|async|Observable|setTimeout|runInInjectionContext|queueMicrotask)",
+            "regex": "^(effect|subscribe|observe|promise|async|Observable|setTimeout|runInInjectionContext|queueMicrotask|ChangeDetectorRef)",
             "match": false
           }
         }

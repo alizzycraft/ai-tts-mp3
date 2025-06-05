@@ -104,32 +104,50 @@ export class HistoryInteractionManagerService implements OnDestroy {
 
   /**
    * Handle playing a history item (select and play)
-   */
-  async playHistoryItem(item: HistoryItem): Promise<void> {
+   */  async playHistoryItem(item: HistoryItem): Promise<void> {
     try {
       console.log('[HistoryInteractionManager] Playing history item:', item.id);
-
-      // If this item is currently playing, make sure we pass the result when toggling
+      
+      // Debug: Check if item result has audio data
+      console.log('[HistoryInteractionManager] Item has audio data:', !!item.result?.audioData);
+      
+      // If this item is currently playing, toggle play/pause
       if (this.playbackService.playingItemId() === item.id) {
+        console.log('[HistoryInteractionManager] Item is currently playing, toggling playback');
         if (!item.result?.audioData) {
           console.warn('[HistoryInteractionManager] Cannot toggle playback - no audio data available');
           return;
         }
-        await this.playbackService.togglePlayPause(item.result, item.id);
+        // Just toggle play/pause state
+        if (this.playbackService.isPlaying()) {
+          this.playbackService.pause();
+        } else {
+          this.playbackService.play();
+        }
         return;
       }
 
-      // First select the item (loads audio without playing)
-      await this.selectHistoryItem(item);
-
-      // Verify we have audio data before playing
+      // First select the item to set it as current and load audio
+      console.log('[HistoryInteractionManager] Selecting history item:', item.id);
+      
+      // Update selection state first for reactivity
+      this.selectedHistoryItem.set(item);
+      
+      // Update query info immediately
+      this.updateQueryInfoFromHistoryItem(item);
+      
+      // Verify we have audio data and explicitly load it
       if (!item.result?.audioData) {
         console.error('[HistoryInteractionManager] Cannot play item - no audio data available');
         return;
       }
-
-      // Then explicitly play the loaded audio
-      await this.playbackService.togglePlayPause(item.result, item.id);
+      
+      // Load the audio data first to ensure it's ready
+      await this.playbackService.loadAudio(item.result, item.id);
+      
+      console.log('[HistoryInteractionManager] Audio loaded, playing now');
+      // Play the loaded audio directly instead of using togglePlayPause
+      this.playbackService.play();
 
       console.log('[HistoryInteractionManager] History item playback started');
     } catch (error) {

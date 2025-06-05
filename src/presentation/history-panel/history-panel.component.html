@@ -55,19 +55,18 @@
     [state]="fileSystem()"
     (toggleStorage)="onToggleStorage()"
     (changeFolder)="onChangeFolder()">
-  </app-file-system-manager>
-  <!-- History List Area (search + list) -->  <app-history-list-area
+  </app-file-system-manager>  <!-- History List Area (search + list) -->
+  <app-history-list-area
     [history]="historyItems()"
     [filteredHistory]="filteredHistory()"
     [searchQuery]="searchQuery()"
     [selectedItemId]="selectedItemId()"
     (deleteItem)="deleteItem($event)"
-    (onDeleteConfirm)="onDeleteItemConfirm()"
     (searchQueryChange)="onSearchQueryChange($event)"
-    (selectItem)="onItemSelect($event)"    (selectItem)="onItemSelect($event)"
+    (selectItem)="onItemSelect($event)"
     (playItem)="onPlayItemClick($event)"
     (downloadItem)="onDownloadItemClick($event)"
-    (clearHistory)="onClearAllConfirm()">
+    (requestClearAll)="onClearAllConfirm()">
   </app-history-list-area>
 
   <!-- Footer -->
