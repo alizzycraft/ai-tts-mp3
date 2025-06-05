@@ -123,6 +123,6 @@ export class EditorComponent {  // Inject services
   // Handle save to history toggle change
   onSaveToHistoryChange(event: Event) {
     const target = event.target as HTMLInputElement;
-    this.settingsService.saveToHistory.set(target.checked);
+    this.settingsService.updateSaveToHistory(target.checked);
   }
 }
