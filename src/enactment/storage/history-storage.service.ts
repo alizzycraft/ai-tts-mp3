@@ -1,15 +1,18 @@
 // Integration layer wrapper for history storage
-import { Injectable, PLATFORM_ID, Signal, inject } from '@angular/core';
+import { Injectable, PLATFORM_ID, Signal, computed, inject } from '@angular/core';
 import { 
   HistoryItem, 
   StorageInfo 
 } from '../../domain/types/storage-types';
-import { HistoryManagementService } from '../../infrastructure/storage/history-management.service';
-import { FileSystemStorageManagerService } from '../../infrastructure/storage/file-system-storage-manager.service';
+import { IHistoryManagementService } from '../../domain/contracts/interfaces/services/history-management.interface';
+import { IFileSystemStorageManagerService } from '../../domain/contracts/interfaces/services/file-system-storage-manager.interface';
+import { IStorageInfoService } from '../../domain/contracts/interfaces/services/storage-info.interface';
+import { HISTORY_MANAGEMENT_SERVICE } from '../../domain/contracts/tokens/history-management.token';
+import { FILE_SYSTEM_STORAGE_MANAGER_SERVICE } from '../../domain/contracts/tokens/file-system-storage-manager.token';
+import { STORAGE_INFO_SERVICE } from '../../domain/contracts/tokens/storage-info.token';
 import { StorageStateService } from '../../domain/services/storage-state.service';
 import { FileSystemStorageState } from '../../domain/contracts/interfaces/models/file-system-storage-sate.interface';
 import { FolderReconnectionPrompt } from '../../domain/contracts/interfaces/models/folder-reconnection-prompt.interface';
-import { StorageInfoService } from '../../infrastructure/storage/storage-info.service';
 import { TTSSettings, TTSResult } from '../../domain/entities/tts.entity';
 import { LoggingService } from '../../common/services/logging.service';
 import { MonitoringService } from '../../enactment/monitoring/monitoring.service';
@@ -23,10 +26,10 @@ export class IntegratedHistoryStorageService implements IHistoryStorageService {
   private platformId = inject(PLATFORM_ID);
   private logging = inject(LoggingService);
   private monitoring = inject(MonitoringService);
-  private historyManagement = inject(HistoryManagementService);
-  private fileSystemManager = inject(FileSystemStorageManagerService);
+  private historyManagement = inject<IHistoryManagementService>(HISTORY_MANAGEMENT_SERVICE);
+  private fileSystemManager = inject<IFileSystemStorageManagerService>(FILE_SYSTEM_STORAGE_MANAGER_SERVICE);
   private storageStateService = inject(StorageStateService);
-  private storageInfoService = inject(StorageInfoService);
+  private storageInfoService = inject<IStorageInfoService>(STORAGE_INFO_SERVICE);
 
   private initialized = false;
 
@@ -38,8 +41,8 @@ export class IntegratedHistoryStorageService implements IHistoryStorageService {
 
   constructor() {
     // Initialize signals directly from services
-    this.items = this.historyManagement.history;
-    this.storage = this.storageInfoService.storageInfo;
+    this.items = computed(() => this.historyManagement.history());
+    this.storage = computed(() => this.storageInfoService.storageInfo());
     this.fileSystem = this.storageStateService.fileSystemState;
     this.reconnection = this.storageStateService.folderReconnectionPrompt;
 

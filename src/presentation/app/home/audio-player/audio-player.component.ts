@@ -1,7 +1,7 @@
 import { Component, computed, input, output, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TTSResult, ModelProvider, Voice } from '../../../../integration/types/tts.types';
-import { HistoryItem } from '../../../../domain/types/storage-types';
+import { HistoryItem } from '../../../../integration/types/domain-types';
 import { 
   FormatDatePipe,
   FormatDurationPipe,

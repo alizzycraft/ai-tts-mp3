@@ -1,8 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, ChangeDetectionStrategy, HostListener, AfterViewInit, ElementRef, inject, Type, TemplateRef } from '@angular/core';
-import { MODAL_SERVICE } from '../../../domain/contracts/tokens/modal-service.token';
-import { IModalOutlet } from '../../../domain/contracts/interfaces/components/modal-outlet.interface';
-import { RECONNECTION_PROMPT_MODAL } from '../../../domain/contracts/tokens/reconnection-prompt-modal.token';
+import { MODAL_SERVICE } from '../../../integration/tokens/modal-service.token';
+import { RECONNECTION_PROMPT_MODAL } from '../../../integration/tokens/reconnection-prompt-modal.token';
 
 @Component({
   selector: 'app-modal-outlet',
@@ -123,7 +122,16 @@ export class ModalOutletComponent implements AfterViewInit, IModalOutlet {
     return this.modalService.template() as TemplateRef<unknown> | null;
   }
 
+  // Type guard for Angular Type
+  private static isType(value: unknown): value is Type<unknown> {
+    return typeof value === 'function' && value.prototype && value.prototype.constructor;
+  }
+
   getComponentType(): Type<unknown> | null {
-    return this.modalService.componentType() ? this.reconnectionPromptModal : null;
+    const componentType = this.modalService.componentType();
+    if (ModalOutletComponent.isType(componentType)) {
+      return componentType;
+    }
+    return null;
   }
 }

@@ -1,10 +1,10 @@
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { MODAL_SERVICE } from '../../../domain/contracts/tokens/modal-service.token';
-import { HISTORY_STORAGE_SERVICE } from '../../../domain/contracts/tokens/history-storage.token';
-import { IHistoryStorageService } from '../../../domain/contracts/interfaces/services/history-storage.interface';
-import { FolderReconnectionPrompt } from '../../../domain/contracts/interfaces/models/folder-reconnection-prompt.interface';
-import { IReconnectionPromptModal } from '../../../domain/contracts/interfaces/components/reconnection-prompt-modal.interface';
+import { MODAL_SERVICE } from '../../../integration/tokens/modal-service.token';
+import { HISTORY_STORAGE_SERVICE } from '../../../integration/tokens/history-storage.token';
+import { IHistoryStorageService } from '../../../integration/interfaces/services/history-storage.interface';
+import { FolderReconnectionPrompt } from '../../../integration/interfaces/models/folder-reconnection-prompt.interface';
+import { IReconnectionPromptModal } from '../../../integration/interfaces/components/reconnection-prompt-modal.interface';
 
 @Component({
   selector: 'app-reconnection-prompt-modal',

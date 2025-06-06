@@ -2,15 +2,15 @@ import { Component, signal, computed, output, input, inject } from '@angular/cor
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ReconnectionPromptModalComponent } from '../../modals/reconnection-prompt-modal.component';
-import { HISTORY_STORAGE_SERVICE } from '../../../../domain/contracts/tokens/history-storage.token';
-import { IHistoryStorageService } from '../../../../domain/contracts/interfaces/services/history-storage.interface';
+import { HISTORY_STORAGE_SERVICE } from '../../../../integration/tokens/history-storage.token';
+import { IHistoryStorageService } from '../../../../integration/interfaces/services/history-storage.interface';
 import { ModalService } from '../../../../integration/services/ui/modal.service';
 import { HistoryListAreaComponent } from './components/history-list-area/history-list-area.component';
 import { StorageInfoComponent } from './components/storage-info/storage-info.component';
 import { FileSystemManagerComponent } from './components/file-system-manager/file-system-manager.component';
 import { HistoryInteractionManagerService } from '../../../../integration/services/storage/history-interaction-manager.service';
-import { HistoryItem } from '../../../../enactment/storage/history-storage.service';
-import { FolderReconnectionPrompt } from '../../../../domain/contracts/interfaces/models/folder-reconnection-prompt.interface';
+import { FolderReconnectionPrompt } from '../../../../integration/interfaces/models/folder-reconnection-prompt.interface';
+import { HistoryItem } from '../../../../integration/types/domain-types';
 
 @Component({
   selector: 'app-history-panel',

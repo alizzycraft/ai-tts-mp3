@@ -1,15 +1,15 @@
 // TTS Generation Manager - handles the speech generation workflow
 import { Injectable, signal, computed, inject } from '@angular/core';
 import { AngularTTSService } from '../../../../../integration/services/audio/angular-tts.service';
-import { HISTORY_STORAGE_SERVICE } from '../../../../../domain/contracts/tokens/history-storage.token';
-import { IHistoryStorageService } from '../../../../../domain/contracts/interfaces/services/history-storage.interface';
+import { HISTORY_STORAGE_SERVICE } from '../../../../../integration/tokens/history-storage.token';
+import { IHistoryStorageService } from '../../../../../integration/interfaces/services/history-storage.interface';
 import { SettingsService } from '../../../../../integration/services/settings/settings.service';
 import { PlaybackService } from '../../../../../integration/services/audio/playback.service';
 import { 
   TTSSettings, 
   TTSResult
 } from '../../../../../integration/types/tts.types';
-import { HistoryItem } from '../../../../../enactment/storage/history-storage.service';
+import { HistoryItem } from '../../../../../integration/types/domain-types';
 
 export interface GenerationResult {
   success: boolean;

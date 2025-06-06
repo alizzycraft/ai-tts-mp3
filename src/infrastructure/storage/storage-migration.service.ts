@@ -38,6 +38,9 @@ export class StorageMigrationService {
     if (!this.isBrowser) return;
 
     if (state.isEnabled && state.directoryHandle) {
+      if (!isFileSystemDirectoryHandle(state.directoryHandle)) {
+        throw new Error('Invalid directory handle provided');
+      }
       await this.saveToFileSystem(item, state.directoryHandle);
     } else {
       this.saveToLocalStorage([item]);
@@ -49,6 +52,9 @@ export class StorageMigrationService {
     if (!this.isBrowser) return;
 
     if (state.isEnabled && state.directoryHandle) {
+      if (!isFileSystemDirectoryHandle(state.directoryHandle)) {
+        throw new Error('Invalid directory handle provided');
+      }
       await this.deleteFromFileSystem(itemId, state.directoryHandle);
     } else {
       this.deleteFromLocalStorage(itemId);
@@ -84,7 +90,11 @@ export class StorageMigrationService {
   /**
    * Load history data from the file system
    */
-  async loadFromFileSystem(handle: FileSystemDirectoryHandle): Promise<HistoryItem[]> {
+  async loadFromFileSystem(handle: unknown): Promise<HistoryItem[]> {
+    if (!isFileSystemDirectoryHandle(handle)) {
+      throw new Error('Invalid directory handle provided');
+    }
+
     if (!this.isBrowser) return [];
 
     try {
@@ -157,7 +167,10 @@ export class StorageMigrationService {
   /**
    * Migrate data from local storage to file system
    */
-  async migrateFromLocalStorage(handle: FileSystemDirectoryHandle): Promise<HistoryItem[]> {
+  async migrateFromLocalStorage(handle: unknown): Promise<HistoryItem[]> {
+    if (!isFileSystemDirectoryHandle(handle)) {
+      throw new Error('Invalid directory handle provided');
+    }
     const history = this.loadFromLocalStorage();
     if (history.length > 0) {
       // This logic should likely be moved or delegated after refactoring
@@ -169,8 +182,10 @@ export class StorageMigrationService {
   }
 
   // Save individual item to file system
-  private async saveToFileSystem(item: HistoryItem, directoryHandle: FileSystemDirectoryHandle): Promise<void> {
-    if (!this.isBrowser) return;
+  private async saveToFileSystem(item: HistoryItem, directoryHandle: unknown): Promise<void> {
+    if (!isFileSystemDirectoryHandle(directoryHandle)) {
+      throw new Error('Invalid directory handle provided');
+    }
 
     try {
       // Save audio file if available
@@ -192,8 +207,10 @@ export class StorageMigrationService {
   }
 
   // Delete item from file system
-  private async deleteFromFileSystem(itemId: string, directoryHandle: FileSystemDirectoryHandle): Promise<void> {
-    if (!this.isBrowser) return;
+  private async deleteFromFileSystem(itemId: string, directoryHandle: unknown): Promise<void> {
+    if (!isFileSystemDirectoryHandle(directoryHandle)) {
+      throw new Error('Invalid directory handle provided');
+    }
 
     try {
       // Delete audio file
@@ -330,4 +347,14 @@ export class StorageMigrationService {
       throw error;
     }
   }
+}
+
+// Type guard for FileSystemDirectoryHandle
+function isFileSystemDirectoryHandle(value: unknown): value is FileSystemDirectoryHandle {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'kind' in value &&
+    (value as { kind: string }).kind === 'directory'
+  );
 }

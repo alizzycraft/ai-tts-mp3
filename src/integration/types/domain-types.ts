@@ -6,16 +6,17 @@ export type {
   TTSResult,
   TTSSettings,
   TTSQuery,
-  QueryId,
   QueryText
 } from '../../domain/entities/tts.entity';
 export { ModelProvider, TTSResultStatus, ApiKey, Voice } from '../../domain/entities/tts.entity';
+
+export type{ QueryId } from '../../common/value-objects/query/query-id';
 
 // Export from provider.entity
 export type { ProviderError } from '../../domain/entities/provider.entity';
 
 // Types for storage services
-import { HistoryItem, StorageInfo } from '../../domain/types/storage-types';
-import { FileSystemStorageState, FolderReconnectionPrompt } from '../../domain/services/storage-state.service';
 
-export type { HistoryItem, StorageInfo, FileSystemStorageState, FolderReconnectionPrompt };
+export type { HistoryItem, StorageInfo } from '../../domain/types/storage-types';
+export type { FileSystemStorageState, FolderReconnectionPrompt } from '../../domain/services/storage-state.service';
+

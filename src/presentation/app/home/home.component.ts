@@ -10,7 +10,7 @@ import {
   FormatDatePipe,
   FormatFileSizePipe 
 } from '../../../integration/transforms/pipes';
-import { HistoryItem } from '../../../enactment/storage/history-storage.service';
+import { HistoryItem } from '../../../integration/types/domain-types';
 
 // Import focused services
 import { TTSGenerationManagerService, GenerationResult } from '../../../integration/services/tts-providers/tts-generation-manager.service';

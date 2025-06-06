@@ -3,7 +3,8 @@ import { Injectable, signal, computed, inject } from '@angular/core';
 import { LoggingService } from '../../common/services/logging.service';
 import { Result } from '../../common/value-objects/query/result';
 import { ModelProvider, TTSSettings } from '../../domain/entities/tts.entity';
-import { TTSProviderFactory } from '../../infrastructure/tts-providers/tts-provider.factory';
+import { ITTSProviderFactory } from '../../domain/contracts/interfaces/services/tts-provider-factory.interface';
+import { TTS_PROVIDER_FACTORY } from '../../domain/contracts/tokens/tts-provider-factory.token';
 import { ApiKey } from '../../common/value-objects/text/api-key';
 import { BrowserStorageService } from '../storage/browser-storage.service';
 
@@ -34,7 +35,7 @@ export interface ProviderValidationResult {
 })
 export class ProviderConfigurationService {
   private logging = inject(LoggingService);
-  private providerFactory = inject(TTSProviderFactory);
+  private ttsProviderFactory = inject<ITTSProviderFactory>(TTS_PROVIDER_FACTORY);
   private browserStorage = inject(BrowserStorageService);
 
   private readonly STORAGE_KEY = 'tts_provider_configs';
@@ -175,7 +176,7 @@ export class ProviderConfigurationService {
       };
 
       // Validate configuration
-      const validationResult = await this.providerFactory.validateProviderConfiguration(provider, testSettings);
+      const validationResult = await this.ttsProviderFactory.validateProviderConfiguration(provider, testSettings);
       
       const result: ProviderValidationResult = {
         provider,
