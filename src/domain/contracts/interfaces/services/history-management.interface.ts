@@ -1,8 +1,9 @@
+import { Signal } from '@angular/core';
 import { HistoryItem } from '../../../types/storage-types';
 import { TTSSettings, TTSResult } from '../../../entities/tts.entity';
 
 export interface IHistoryManagementService {
-  history: () => HistoryItem[];
+  history: Signal<HistoryItem[]>;
   loadHistory(): Promise<void>;
   addToHistory(
     text: string,

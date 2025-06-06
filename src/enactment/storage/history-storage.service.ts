@@ -1,5 +1,5 @@
 // Integration layer wrapper for history storage
-import { Injectable, PLATFORM_ID, Signal, computed, inject } from '@angular/core';
+import { Injectable, PLATFORM_ID, Signal, computed, inject, signal, effect } from '@angular/core';
 import { 
   HistoryItem, 
   StorageInfo 
@@ -12,7 +12,7 @@ import { FILE_SYSTEM_STORAGE_MANAGER_SERVICE } from '../../domain/contracts/toke
 import { STORAGE_INFO_SERVICE } from '../../domain/contracts/tokens/storage-info.token';
 import { StorageStateService } from '../../domain/services/storage-state.service';
 import { FileSystemStorageState } from '../../domain/contracts/interfaces/models/file-system-storage-sate.interface';
-import { FolderReconnectionPrompt } from '../../domain/contracts/interfaces/models/folder-reconnection-prompt.interface';
+import { FolderReconnectionPromptModel } from '../../domain/contracts/interfaces/models/folder-reconnection-prompt-model.interface';
 import { TTSSettings, TTSResult } from '../../domain/entities/tts.entity';
 import { LoggingService } from '../../common/services/logging.service';
 import { MonitoringService } from '../../enactment/monitoring/monitoring.service';
@@ -37,18 +37,27 @@ export class IntegratedHistoryStorageService implements IHistoryStorageService {
   readonly items: Signal<HistoryItem[]>;
   readonly storage: Signal<StorageInfo>;
   readonly fileSystem: Signal<FileSystemStorageState>;
-  readonly reconnection: Signal<FolderReconnectionPrompt | null>;
+  readonly reconnection: Signal<FolderReconnectionPromptModel | null>;
+
+  private readonly _historyLoaded = signal(false);
+  readonly historyLoaded = computed(() => this._historyLoaded());
 
   constructor() {
     // Initialize signals directly from services
-    this.items = computed(() => this.historyManagement.history());
+    this.items = this.historyManagement.history;
     this.storage = computed(() => this.storageInfoService.storageInfo());
     this.fileSystem = this.storageStateService.fileSystemState;
     this.reconnection = this.storageStateService.folderReconnectionPrompt;
 
     if (this.isBrowser) {
-      this.ensureInitialized().catch(error => 
-        this.logging.error('Failed to initialize history storage', error as Error));
+      effect(() => {
+        const ready = this.storageStateService.storageReady();
+        const mode = this.storageStateService.storageMode();
+        if (ready && mode !== 'none' && !this.initialized) {
+          this.ensureInitialized().catch(error =>
+            this.logging.error('Failed to initialize history storage', error as Error));
+        }
+      });
     }
   }
 
@@ -61,16 +70,15 @@ export class IntegratedHistoryStorageService implements IHistoryStorageService {
 
     try {
       this.logging.debug('Initializing history storage services', 'History');
-      
       // Initialize services in the right order
       await this.fileSystemManager.initializeService();
       await this.historyManagement.loadHistory();
-      
       this.initialized = true;
+      this._historyLoaded.set(true);
       this.logging.info('History storage services initialized', 'History');
-      
     } catch (err) {
       this.initialized = false;
+      this._historyLoaded.set(false);
       const error = err instanceof Error ? err : new Error(String(err));
       this.logging.error('Failed to initialize history storage', error);
       throw error;
@@ -203,4 +211,4 @@ export class IntegratedHistoryStorageService implements IHistoryStorageService {
 }
 
 // Re-export types for convenience
-export type { HistoryItem, StorageInfo, FileSystemStorageState, FolderReconnectionPrompt, TTSResult };
+export type { HistoryItem, StorageInfo, FileSystemStorageState, FolderReconnectionPromptModel as FolderReconnectionPrompt, TTSResult };

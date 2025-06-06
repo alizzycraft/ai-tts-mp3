@@ -1,8 +1,15 @@
 <!-- AI-TTS-MP3 App -->
 <div class="app-container">
   <main class="app-main">
-    <router-outlet></router-outlet>
+    <div class="app-init-overlay" *ngIf="!appInitialized()">
+      <div class="app-init-spinner"></div>
+      <div class="app-init-text">Initializing...</div>
+    </div>
+    <div *ngIf="appInitialized()">
+      <router-outlet></router-outlet>
+    </div>
     <app-modal-outlet></app-modal-outlet>
+    {{ maybeShowReconnectionModal() }}
   </main>
   <footer class="app-footer">
     <div class="footer-content">

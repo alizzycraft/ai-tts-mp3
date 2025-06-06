@@ -4,7 +4,7 @@ import { isPlatformBrowser } from '@angular/common';
 import { HistoryItem } from '../../domain/types/storage-types';
 import { DataSerializationService } from './data-serialization.service';
 import { FileSystemOperationsService } from './file-system-operations.service';
-import { FileSystemStorageState } from '../../domain/services/storage-state-integration.service';
+import { FileSystemStorageState } from '../../domain/contracts/interfaces/models/file-system-storage-sate.interface';
 
 @Injectable({
   providedIn: 'root'

@@ -10,6 +10,7 @@ import {
   TTSResult
 } from '../../../../../integration/types/tts.types';
 import { HistoryItem } from '../../../../../integration/types/domain-types';
+import { ApiKey } from '../../../../../common/value-objects/text/api-key';
 
 export interface GenerationResult {
   success: boolean;

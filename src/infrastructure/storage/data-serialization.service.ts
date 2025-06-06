@@ -93,10 +93,16 @@ export class DataSerializationService {
   // Deserialize history item from file system metadata (audioData loaded separately)
   deserializeFromFileSystemMetadata(serializedItem: Record<string, unknown>, audioData?: Uint8Array): HistoryItem {
     const resultData = serializedItem['result'] as Record<string, unknown> || {};
+    let text = serializedItem['text'];
+    if (typeof text !== 'string') {
+      console.warn('[DataSerializationService] HistoryItem.text is not a string during deserialization:', text);
+      text = text !== undefined && text !== null ? String(text) : '';
+    }
     const historyItem: HistoryItem = {
       id: serializedItem['id'] as string,
-      text: serializedItem['text'] as string,
-      settings: this.mapLoadedSettings(serializedItem['settings'] as Record<string, unknown>),      result: {
+      text: text as string,
+      settings: this.mapLoadedSettings(serializedItem['settings'] as Record<string, unknown>),
+      result: {
         queryId: resultData['queryId'] ? QueryId.fromString(resultData['queryId'] as string) : QueryId.generate(),
         status: (resultData['status'] as TTSResultStatus) || TTSResultStatus.COMPLETED,
         audioData: audioData,

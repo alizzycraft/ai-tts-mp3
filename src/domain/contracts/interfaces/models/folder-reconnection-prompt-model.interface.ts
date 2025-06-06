@@ -1,4 +1,4 @@
-export interface FolderReconnectionPrompt {
+export interface FolderReconnectionPromptModel {
   previousPath: string;
   shouldPrompt: boolean;
 }

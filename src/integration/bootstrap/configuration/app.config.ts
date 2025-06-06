@@ -8,6 +8,10 @@ import { modalServiceProvider } from '../../providers/modal.provider';
 import { modalOutletProvider } from '../../providers/modal-outlet.provider';
 import { reconnectionPromptModalProvider } from '../../providers/reconnection-prompt-modal.provider';
 import { historyStorageProvider } from '../../providers/history-storage.provider';
+import { ttsProviderFactoryProvider } from '../../providers/tts-provider-factory.provider';
+import { historyManagementProvider } from '../../providers/history-management.provider';
+import { fileSystemStorageManagerProvider } from '../../providers/file-system-storage-manager.provider';
+import { storageInfoProvider } from '../../providers/storage-info.provider';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -17,6 +21,7 @@ export const appConfig: ApplicationConfig = {
     provideClientHydration(),
     provideHttpClient(withFetch()),    // History Storage provider
     historyStorageProvider,
+    historyManagementProvider,
     
     // Modal Service provider
     modalServiceProvider,
@@ -25,6 +30,11 @@ export const appConfig: ApplicationConfig = {
     modalOutletProvider,
     
     // Reconnection Prompt Modal provider
-    reconnectionPromptModalProvider
+    reconnectionPromptModalProvider,
+    
+    // TTS Provider Factory
+    ttsProviderFactoryProvider,
+    fileSystemStorageManagerProvider,
+    storageInfoProvider
   ]
 };

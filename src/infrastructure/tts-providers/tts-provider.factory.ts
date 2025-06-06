@@ -1,66 +1,30 @@
 // Infrastructure provider factory for TTS services
-import { ModelProvider } from '../../domain/entities/tts.entity';
-import { ITTSProviderService } from '../../domain/contracts/interfaces/services/tts-provider.interface';
+import { Injectable } from '@angular/core';
+import { Result } from '../../common/value-objects/query/result';
+import { ModelProvider, TTSSettings } from '../../domain/entities/tts.entity';
+import type { ITTSProviderFactory } from '../../domain/contracts/interfaces/services/tts-provider-factory.interface';
 import { OpenAITTSProviderService } from './openai/openai-tts-provider.service';
 
-export class TTSProviderFactory {
-  private static providers = new Map<ModelProvider, ITTSProviderService>();
-
-  static getProvider(provider: ModelProvider): ITTSProviderService {
-    // Check if provider is already instantiated
-    if (this.providers.has(provider)) {
-      return this.providers.get(provider)!;
-    }
-
-    // Create new provider instance based on type
-    let providerInstance: ITTSProviderService;
-
+@Injectable({ providedIn: 'root' })
+export class TTSProviderFactoryService implements ITTSProviderFactory {
+  createProvider(provider: ModelProvider): unknown {
     switch (provider) {
       case ModelProvider.OPENAI:
-        providerInstance = new OpenAITTSProviderService();
-        break;
-      
-      case ModelProvider.ELEVENLABS:
-        // TODO: Implement ElevenLabs provider
-        throw new Error('ElevenLabs provider not yet implemented');
-      
-      case ModelProvider.AZURE:
-        // TODO: Implement Azure provider
-        throw new Error('Azure provider not yet implemented');
-      
-      case ModelProvider.GOOGLE:
-        // TODO: Implement Google provider
-        throw new Error('Google provider not yet implemented');
-      
-      case ModelProvider.AWS:
-        // TODO: Implement AWS provider
-        throw new Error('AWS provider not yet implemented');
-      
+        return new OpenAITTSProviderService();
       default:
-        throw new Error(`Unsupported provider: ${provider}`);
+        throw new Error(`Provider not implemented: ${provider}`);
     }
-
-    // Cache the provider instance
-    this.providers.set(provider, providerInstance);
-    return providerInstance;
   }
 
-  static getSupportedProviders(): ModelProvider[] {
-    return [
-      ModelProvider.OPENAI,
-      // TODO: Add other providers as they're implemented
-      // ModelProvider.ELEVENLABS,
-      // ModelProvider.AZURE,
-      // ModelProvider.GOOGLE,
-      // ModelProvider.AWS,
-    ];
-  }
-
-  static isProviderSupported(provider: ModelProvider): boolean {
-    return this.getSupportedProviders().includes(provider);
-  }
-
-  static clearCache(): void {
-    this.providers.clear();
+  async validateProviderConfiguration(provider: ModelProvider, settings: TTSSettings): Promise<Result<boolean, string>> {
+     switch (provider) {
+      case ModelProvider.OPENAI:
+        {
+          const service = new OpenAITTSProviderService();
+          return service.validateSettings(settings);
+        }
+      default:
+        throw new Error(`Provider not implemented: ${provider}`);
+    }
   }
 }

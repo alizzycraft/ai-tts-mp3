@@ -52,14 +52,36 @@ export class HomeComponent implements OnInit, AfterViewInit {
 
   // Computed properties that delegate to focused services
   canGenerate = computed(() => {
-    return this.ttsGenerationManager.canGenerate(this.inputText(), this.isBrowser);
+    const result = this.ttsGenerationManager.canGenerate(this.inputText(), this.isBrowser);
+    console.log('[SIGNAL][HomeComponent] canGenerate SIGNAL EMIT:', result, this.inputText(), this.isBrowser);
+    return result;
   });
   // Expose service state through computed properties
-  isProcessing = computed(() => this.ttsGenerationManager.isProcessing());
-  currentResult = computed(() => this.ttsGenerationManager.currentResult());
-  errorMessage = computed(() => this.ttsGenerationManager.errorMessage());
-  storageWarning = computed(() => this.ttsGenerationManager.storageWarning());
-  currentQueryInfo = computed(() => this.historyInteractionManager.currentQueryInfo());
+  isProcessing = computed(() => {
+    const processing = this.ttsGenerationManager.isProcessing();
+    console.log('[SIGNAL][HomeComponent] isProcessing SIGNAL EMIT:', processing);
+    return processing;
+  });
+  currentResult = computed(() => {
+    const result = this.ttsGenerationManager.currentResult();
+    console.log('[SIGNAL][HomeComponent] currentResult SIGNAL EMIT:', result);
+    return result;
+  });
+  errorMessage = computed(() => {
+    const error = this.ttsGenerationManager.errorMessage();
+    console.log('[SIGNAL][HomeComponent] errorMessage SIGNAL EMIT:', error);
+    return error;
+  });
+  storageWarning = computed(() => {
+    const warning = this.ttsGenerationManager.storageWarning();
+    console.log('[SIGNAL][HomeComponent] storageWarning SIGNAL EMIT:', warning);
+    return warning;
+  });
+  currentQueryInfo = computed(() => {
+    const info = this.historyInteractionManager.currentQueryInfo();
+    console.log('[SIGNAL][HomeComponent] currentQueryInfo SIGNAL EMIT:', info);
+    return info;
+  });
 
   ngOnInit() {
     // Code that should only run in the browser
@@ -77,6 +99,7 @@ export class HomeComponent implements OnInit, AfterViewInit {
 
   // Text editor event handlers
   onTextChange(text: string) {
+    console.log('[STATE][HomeComponent] inputText set:', text);
     this.inputText.set(text);
   }
 

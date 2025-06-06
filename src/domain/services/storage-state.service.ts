@@ -3,7 +3,10 @@ import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { signal, computed } from '@angular/core';
 import { FileSystemStorageState } from '../contracts/interfaces/models/file-system-storage-sate.interface';
-import { FolderReconnectionPrompt } from '../contracts/interfaces/models/folder-reconnection-prompt.interface';
+import { FolderReconnectionPromptModel } from '../contracts/interfaces/models/folder-reconnection-prompt-model.interface';
+
+// Storage mode: 'none' (not ready), 'local' (localStorage), 'file' (file system)
+export type StorageMode = 'none' | 'local' | 'file';
 
 @Injectable({
   providedIn: 'root'
@@ -14,6 +17,12 @@ export class StorageStateService {
   private initialized = false;
   private readonly platformId = inject(PLATFORM_ID);
 
+  // Storage mode and readiness signals
+  private readonly _storageMode = signal<StorageMode>('none');
+  readonly storageMode = computed(() => this._storageMode());
+  private readonly _storageReady = signal<boolean>(false);
+  readonly storageReady = computed(() => this._storageReady());
+
   // Replace BehaviorSubjects with signals
   private readonly _fileSystemState = signal<FileSystemStorageState>({
     isSupported: false,
@@ -22,7 +31,7 @@ export class StorageStateService {
     directoryHandle: null
   });
 
-  private readonly _folderReconnectionPrompt = signal<FolderReconnectionPrompt | null>(null);
+  private readonly _folderReconnectionPrompt = signal<FolderReconnectionPromptModel | null>(null);
 
   // Add error state signal
   private readonly _stateError = signal<string | null>(null);
@@ -74,13 +83,14 @@ export class StorageStateService {
       if (updates.isEnabled !== undefined || updates.selectedPath !== undefined) {
         this.saveFolderState();
         this.saveStorageState();
+        console.log('[StorageState] updateFileSystemState: saved state', newState);
       }
       return newState;
     });
   }
 
   // Set the reconnection prompt - just stores state, no UI interaction
-  setFolderReconnectionPrompt(prompt: FolderReconnectionPrompt | null): void {
+  setFolderReconnectionPrompt(prompt: FolderReconnectionPromptModel | null): void {
     this._folderReconnectionPrompt.set(prompt);
 
     // Verify the update
@@ -108,9 +118,11 @@ export class StorageStateService {
     return this._fileSystemState();
   }
 
-  loadStorageState(): void {
-    if (!this.isBrowser || typeof localStorage === 'undefined') return;
-
+  loadStorageState(onLoaded?: () => void): void {
+    if (!this.isBrowser || typeof localStorage === 'undefined') {
+      if (onLoaded) onLoaded();
+      return;
+    }
     try {
       // Load storage state
       const stored = localStorage.getItem(this.STORAGE_STATE_KEY);
@@ -118,7 +130,6 @@ export class StorageStateService {
         const savedState = JSON.parse(stored);
         if (savedState && typeof savedState === 'object' && 'isEnabled' in savedState) {
           const currentState = this._fileSystemState();
-          
           // Don't set isEnabled true if we're loading from storage,
           // since we need to reconnect first
           this._fileSystemState.set({
@@ -127,7 +138,6 @@ export class StorageStateService {
             selectedPath: savedState.selectedPath || null
           });
           this._stateError.set(null);
-
           // If we had a previously enabled state with a path, set up reconnection
           if (savedState.isEnabled && savedState.selectedPath) {
             this.setFolderReconnectionPrompt({
@@ -137,7 +147,6 @@ export class StorageStateService {
           }
         }
       }
-      
       // Verify prompt state after loading
       this.verifyPromptState();
     } catch (error) {
@@ -145,6 +154,7 @@ export class StorageStateService {
       console.error(errorMsg, error);
       this._stateError.set(errorMsg);
     }
+    if (onLoaded) onLoaded();
   }
 
   saveStorageState(): void {
@@ -158,6 +168,7 @@ export class StorageStateService {
       };
       localStorage.setItem(this.STORAGE_STATE_KEY, JSON.stringify(stateToSave));
       this._stateError.set(null);
+      console.log('[StorageState] saveStorageState: wrote', stateToSave);
     } catch (error) {
       const errorMsg = '[StorageState] Failed to save storage state';
       console.error(errorMsg, error);
@@ -205,6 +216,7 @@ export class StorageStateService {
         localStorage.setItem(this.FOLDER_STATE_KEY, JSON.stringify({ 
           selectedPath: state.selectedPath 
         }));
+        console.log('[StorageState] saveFolderState: wrote', { selectedPath: state.selectedPath });
       }
     } catch (error) {
       console.error('[StorageState] Error saving folder state:', error);
@@ -221,8 +233,16 @@ export class StorageStateService {
       console.error('[StorageState] Error clearing previous folder state:', error);
     }
   }
+
+  setStorageMode(mode: StorageMode) {
+    this._storageMode.set(mode);
+  }
+
+  setStorageReady(ready: boolean) {
+    this._storageReady.set(ready);
+  }
 }
-export {
-  FileSystemStorageState, FolderReconnectionPrompt // Replace BehaviorSubjects with signals
+export type {
+  FileSystemStorageState, FolderReconnectionPromptModel as FolderReconnectionPrompt
 };
 

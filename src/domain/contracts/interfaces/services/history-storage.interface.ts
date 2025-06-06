@@ -1,6 +1,6 @@
 import { Signal } from '@angular/core';
 import { HistoryItem, StorageInfo } from '../../../types/storage-types';
-import { FolderReconnectionPrompt } from '../models/folder-reconnection-prompt.interface';
+import { FolderReconnectionPromptModel } from '../models/folder-reconnection-prompt-model.interface';
 import { FileSystemStorageState } from '../models/file-system-storage-sate.interface';
 import { TTSSettings, TTSResult } from '../../../entities/tts.entity';
 
@@ -9,7 +9,8 @@ export interface IHistoryStorageService {
   items: Signal<HistoryItem[]>;
   storage: Signal<StorageInfo>;
   fileSystem: Signal<FileSystemStorageState>;
-  reconnection: Signal<FolderReconnectionPrompt | null>;
+  reconnection: Signal<FolderReconnectionPromptModel | null>;
+  historyLoaded?: Signal<boolean>;
 
   // File system operations
   enableFileSystemStorage(): Promise<{ success: boolean; error?: string }>;

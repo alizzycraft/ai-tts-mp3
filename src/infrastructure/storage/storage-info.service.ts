@@ -3,7 +3,7 @@ import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { signal, computed } from '@angular/core';
 import { HistoryItem, StorageInfo } from '../../domain/types/storage-types';
-import { FileSystemStorageState } from '../../domain/services/storage-state-integration.service';
+import { FileSystemStorageState } from '../../domain/services/storage-state.service';
 
 @Injectable({
   providedIn: 'root'

@@ -1,4 +1,4 @@
-import { Result } from '../../../../integration/value-objects/query';
+import { Result } from '../../../../common/value-objects/query/result';
 import { ModelProvider, TTSSettings } from '../../../entities/tts.entity';
 
 export interface ITTSProviderFactory {

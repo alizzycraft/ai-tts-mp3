@@ -30,7 +30,7 @@ import { HistoryListComponent } from '../history-list/history-list.component';
       <!-- History List -->
       <app-history-list
         [searchQuery]="searchQuery()"
-        [history]="filteredHistory()"
+        [history]="history()"
         [filteredHistory]="filteredHistory()"
         [selectedItemId]="selectedItemId()"
         (itemSelected)="selectItem.emit($event)"

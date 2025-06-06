@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MODAL_SERVICE } from '../../../integration/tokens/modal-service.token';
 import { HISTORY_STORAGE_SERVICE } from '../../../integration/tokens/history-storage.token';
@@ -19,7 +19,7 @@ import { IReconnectionPromptModal } from '../../../integration/interfaces/compon
         <p>You previously enabled unlimited storage using this folder:</p>
         <div class="folder-info">
           <img src="assets/icons/outline/folder-down.svg" width="20" height="20" class="inline-icon" alt="Folder">
-          <span class="folder-name">{{ promptData.previousPath }}</span>
+          <span class="folder-name">{{ previousPath() }}</span>
         </div>
         <p>Would you like to reconnect to this folder to access your saved history?</p>
         <div *ngIf="error()" class="error-message">{{ error() }}</div>
@@ -73,14 +73,19 @@ import { IReconnectionPromptModal } from '../../../integration/interfaces/compon
   `]
 })
 export class ReconnectionPromptModalComponent implements IReconnectionPromptModal {
+  // Implement promptData as a getter to satisfy the interface
+  get promptData() {
+    // Always return an object with the required shape, or fallback values
+    return (this.modalService.data() as FolderReconnectionPrompt) ?? { previousPath: '', shouldPrompt: false };
+  }
+
   private readonly modalService = inject(MODAL_SERVICE);
   private readonly historyService = inject<IHistoryStorageService>(HISTORY_STORAGE_SERVICE);
-  // Use the data provided by ModalService, fallback to default if missing
-  get promptData(): FolderReconnectionPrompt {
-    return (this.modalService.data() as FolderReconnectionPrompt) ?? { previousPath: '', shouldPrompt: true };
-  }
   error = signal<string | null>(null);
   reconnecting = signal(false);
+
+  previousPath = computed(() => this.promptData.previousPath ?? '');
+
   async reconnect() {
     this.reconnecting.set(true);
     this.error.set(null);

@@ -47,11 +47,17 @@ export class HistoryManagementService {
       this.updateStorageInfo();
       return;
     }
+    // Only load if storage is ready and mode is not 'none'
+    if (!this.storageState.storageReady() || this.storageState.storageMode() === 'none') {
+      return;
+    }
 
     const state = this.storageState.fileSystemState();
     console.log('[HistoryManagementService] loadHistory called with state:', {
       isEnabled: state.isEnabled,
-      hasDirectoryHandle: !!state.directoryHandle
+      hasDirectoryHandle: !!state.directoryHandle,
+      selectedPath: state.selectedPath,
+      directoryHandle: state.directoryHandle
     });
 
     let history: HistoryItem[] = [];
@@ -59,12 +65,22 @@ export class HistoryManagementService {
       // Load from file system
       console.log('[HistoryManagementService] Loading history from file system...');
       history = await this.migration.loadFromFileSystem(state.directoryHandle);
-      console.log(`[HistoryManagementService] Loaded ${history.length} items from file system`);
+      console.log(`[HistoryManagementService] Loaded ${history.length} items from file system`, history);
+      if (history.length > 0) {
+        for (const item of history) {
+          console.log('[HistoryManagementService] Item loaded:', item, 'text:', item.text, 'typeof text:', typeof item.text);
+        }
+      }
     } else {
       // Load from localStorage (fallback)
       console.log('[HistoryManagementService] Loading history from localStorage...');
       history = this.migration.loadFromLocalStorage();
-      console.log(`[HistoryManagementService] Loaded ${history.length} items from localStorage`);
+      console.log(`[HistoryManagementService] Loaded ${history.length} items from localStorage`, history);
+      if (history.length > 0) {
+        for (const item of history) {
+          console.log('[HistoryManagementService] Item loaded:', item, 'text:', item.text, 'typeof text:', typeof item.text);
+        }
+      }
     }
 
     // Update signal with loaded history

@@ -2,7 +2,7 @@
 import { Injectable, inject } from '@angular/core';
 import { StorageStateService } from '../../../domain/services/storage-state.service';
 import { FileSystemStorageState } from '../../../domain/contracts/interfaces/models/file-system-storage-sate.interface';
-import { FolderReconnectionPrompt } from '../../../domain/contracts/interfaces/models/folder-reconnection-prompt.interface';
+import { FolderReconnectionPromptModel } from '../../../domain/contracts/interfaces/models/folder-reconnection-prompt-model.interface';
 import { MODAL_SERVICE } from '../../../domain/contracts/tokens/modal-service.token';
 import { RECONNECTION_PROMPT_MODAL } from '../../../domain/contracts/tokens/reconnection-prompt-modal.token';
 
@@ -78,7 +78,7 @@ export class StorageStateIntegrationService {  private readonly storageStateServ
     Object.assign(state, validated);
     return true;
   }
-  private isValidFolderReconnectionPrompt(data: unknown): data is FolderReconnectionPrompt {
+  private isValidFolderReconnectionPrompt(data: unknown): data is FolderReconnectionPromptModel {
     if (!data || typeof data !== 'object') {
       return false;
     }
@@ -163,7 +163,7 @@ export class StorageStateIntegrationService {  private readonly storageStateServ
   getState(): FileSystemStorageState {
     return this.storageStateService.getState();
   }
-  showReconnectionModal(promptData: FolderReconnectionPrompt): void {
+  showReconnectionModal(promptData: FolderReconnectionPromptModel): void {
     // Validate the prompt data even though it's typed
     if (!this.isValidFolderReconnectionPrompt(promptData)) {
       console.error('[StorageStateIntegration] Invalid reconnection prompt data');

@@ -1,7 +1,6 @@
 import { Component, signal, computed, output, input, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ReconnectionPromptModalComponent } from '../../modals/reconnection-prompt-modal.component';
 import { HISTORY_STORAGE_SERVICE } from '../../../../integration/tokens/history-storage.token';
 import { IHistoryStorageService } from '../../../../integration/interfaces/services/history-storage.interface';
 import { ModalService } from '../../../../integration/services/ui/modal.service';
@@ -11,6 +10,8 @@ import { FileSystemManagerComponent } from './components/file-system-manager/fil
 import { HistoryInteractionManagerService } from '../../../../integration/services/storage/history-interaction-manager.service';
 import { FolderReconnectionPrompt } from '../../../../integration/interfaces/models/folder-reconnection-prompt.interface';
 import { HistoryItem } from '../../../../integration/types/domain-types';
+import { StorageStateIntegrationService } from '../../../../integration/services/storage/storage-state-integration.service';
+import { StorageInitializationStateService } from '../../../../infrastructure/storage/storage-initialization-state.service';
 
 @Component({
   selector: 'app-history-panel',
@@ -21,6 +22,7 @@ import { HistoryItem } from '../../../../integration/types/domain-types';
     HistoryListAreaComponent, 
     StorageInfoComponent, 
     FileSystemManagerComponent
+    // ReconnectionPromptModalComponent removed: modal is now global only
   ],
   templateUrl: './history-panel.component.html',
   styleUrls: ['./history-panel.component.scss']
@@ -29,6 +31,7 @@ export class HistoryPanelComponent {  private historyService = inject<IHistorySt
   private modalService = inject(ModalService);
 
   private historyInteractionManager = inject(HistoryInteractionManagerService);
+  private initializationState = inject(StorageInitializationStateService);
   
   // Outputs for parent component communication
   historyItemSelected = output<HistoryItem>();
@@ -55,19 +58,26 @@ export class HistoryPanelComponent {  private historyService = inject<IHistorySt
   readonly showClearModal = computed(() => this._showClearModal());
   readonly filteredHistory = computed(() => {
     const query = this._searchQuery().toLowerCase();
-    if (!query) return this.historyItems();
-    
-    return this.historyItems().filter(item => 
-      item.text.toLowerCase().includes(query) ||
+    const items = this.historyItems();
+    console.log('[SIGNAL][HistoryPanelComponent] filteredHistory SIGNAL EMIT:', items, query);
+    if (items.length > 0) {
+      for (const item of items) {
+        console.log('[HistoryPanelComponent] Item:', item, 'text:', item.text, 'typeof text:', typeof item.text);
+      }
+    }
+    if (!query) return items;
+    return items.filter(item => 
+      typeof item.text === 'string' && item.text.toLowerCase().includes(query) ||
       (item.metadata?.title && item.metadata.title.toLowerCase().includes(query))
     );
   });
 
   // Reactive state derived from history service signals
-  readonly historyItems = computed(() => this.historyService.items());
+  readonly historyItems = this.historyService.items;
   readonly storage = computed(() => this.historyService.storage());
   readonly fileSystem = computed(() => this.historyService.fileSystem());
   private readonly promptSignal = computed(() => this.historyService.reconnection());
+  readonly historyLoaded = computed(() => this.historyService.historyLoaded ? this.historyService.historyLoaded() : true);
 
   // Computed UI state  
   readonly storageWarningLevel = computed(() => {
@@ -91,51 +101,32 @@ export class HistoryPanelComponent {  private historyService = inject<IHistorySt
       itemCount: items.length,
       folderName: fileSystem.selectedPath || undefined
     };
-  });  constructor() {
-    // Set up signal monitoring for reconnection prompts
-    // This will monitor the signal value and show modal when needed
-    this.monitorReconnectionPrompt();
+  });  // UI state for modal and loading
+  readonly initState = computed(() => {
+    const state = this.initializationState.state();
+    console.log('[SIGNAL][HistoryPanelComponent] initState SIGNAL EMIT:', state);
+    return state;
+  });
+  get showReconnectionModal() {
+    const s = this.initState();
+    const result = s.waitingForReconnectionPrompt && !!s.reconnectionPrompt;
+    console.log('[SIGNAL][HistoryPanelComponent] showReconnectionModal SIGNAL EMIT:', result, s);
+    return result;
+  }
+  get showLoadingSpinner() {
+    const s = this.initState();
+    const result = s.isInitializing;
+    console.log('[SIGNAL][HistoryPanelComponent] showLoadingSpinner SIGNAL EMIT:', result, s);
+    return result;
   }
 
-  private monitorReconnectionPrompt(): void {
-    // Check for existing prompt immediately
-    const currentPrompt = this.promptSignal();
-    if (currentPrompt?.shouldPrompt) {
-      this.showReconnectionModal(currentPrompt);
-    }
-    
-    // Monitor for future changes by setting up a signal subscription pattern
-    // Since we're signal-first, we'll use a simple interval check
-    // This is better than effects for this architectural pattern
-    let lastPromptState: FolderReconnectionPrompt | null = currentPrompt;
-    
-    const checkPromptChanges = () => {
-      const newPrompt = this.promptSignal();
-      
-      // Check if prompt state changed and we need to show modal
-      if (newPrompt?.shouldPrompt && 
-          (!lastPromptState || !lastPromptState.shouldPrompt)) {
-        this.showReconnectionModal(newPrompt);
-      }
-      
-      lastPromptState = newPrompt;
-    };
-    
-    // Check every 500ms for prompt changes
-    setInterval(checkPromptChanges, 500);
-  }
-
-  private showReconnectionModal(prompt: FolderReconnectionPrompt): void {
-    this.modalService.showComponent({
-      type: 'component',
-      componentType: ReconnectionPromptModalComponent,
-      data: prompt,
-      allowDismiss: false
-    });
+  constructor() {
+    // No polling, no effect, state-driven only
   }
 
   // Event handlers
   onSearchQueryChange(query: string): void {
+    console.log('[STATE][HistoryPanelComponent] _searchQuery set:', query);
     this._searchQuery.set(query);
   }
 
@@ -242,4 +233,6 @@ export class HistoryPanelComponent {  private historyService = inject<IHistorySt
   updateSearchQuery(query: string): void {
     this._searchQuery.set(query);
   }
+
+  public storageStateIntegration = inject(StorageStateIntegrationService);
 }

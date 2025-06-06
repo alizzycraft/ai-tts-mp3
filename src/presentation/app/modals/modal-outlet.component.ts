@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, ChangeDetectionStrategy, HostListener, AfterViewInit, ElementRef, inject, Type, TemplateRef } from '@angular/core';
 import { MODAL_SERVICE } from '../../../integration/tokens/modal-service.token';
 import { RECONNECTION_PROMPT_MODAL } from '../../../integration/tokens/reconnection-prompt-modal.token';
+import type { IModalOutlet } from '../../../integration/interfaces/components/modal-outlet.interface';
 
 @Component({
   selector: 'app-modal-outlet',
