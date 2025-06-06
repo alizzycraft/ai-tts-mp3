@@ -1,7 +1,5 @@
 // Domain entities and types for TTS functionality
 
-// Import value objects
-export { QueryId } from '../../common/value-objects/query/query-id';
 export { QueryText } from '../../common/value-objects/text/query-text';
 export { ApiKey } from '../../common/value-objects/text/api-key';
 

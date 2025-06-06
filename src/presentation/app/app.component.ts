@@ -1,7 +1,7 @@
 import { Component, PLATFORM_ID, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { isPlatformBrowser } from '@angular/common';
-import { ModalOutletComponent } from '../shared/modal-outlet.component';
+import { ModalOutletComponent } from './modals/modal-outlet.component';
 
 @Component({
   selector: 'app-root',

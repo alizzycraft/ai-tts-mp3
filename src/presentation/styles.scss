@@ -145,6 +145,7 @@ img[src*="/icons/"] {
   display: flex;
   align-items: center;
   justify-content: center;
+  outline: none; /* Remove default focus outline - important for a11y handling */
 }
 
 .modal-content {

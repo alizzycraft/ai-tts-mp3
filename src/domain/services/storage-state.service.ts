@@ -2,18 +2,8 @@
 import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { signal, computed } from '@angular/core';
-
-export interface FileSystemStorageState {
-  isSupported: boolean;
-  isEnabled: boolean;
-  selectedPath: string | null;
-  directoryHandle: FileSystemDirectoryHandle | null;
-}
-
-export interface FolderReconnectionPrompt {
-  previousPath: string;
-  shouldPrompt: boolean;
-}
+import { FileSystemStorageState } from '../contracts/interfaces/models/file-system-storage-sate.interface';
+import { FolderReconnectionPrompt } from '../contracts/interfaces/models/folder-reconnection-prompt.interface';
 
 @Injectable({
   providedIn: 'root'

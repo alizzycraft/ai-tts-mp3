@@ -1,4 +1,4 @@
-import { ModelProvider } from '../entities/tts.entity';
+import { ModelProvider } from '../../domain/entities/tts.entity';
 
 export const PROVIDER_FLAGS: Record<ModelProvider, boolean> = {
   [ModelProvider.OPENAI]: true,

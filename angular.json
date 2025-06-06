@@ -25,7 +25,7 @@
           "options": {
             "outputPath": "dist/ai-tts-mp3",
             "index": "src/presentation/index.html",
-            "browser": "src/integration/bootstrap/main.ts",
+            "browser": "src/integration/bootstrap/startup/main.ts",
             "polyfills": [
             ],
             "tsConfig": "tsconfig.app.json",
@@ -45,12 +45,14 @@
               "src/presentation/styles.scss"
             ],
             "scripts": [],
-            "server": "src/integration/bootstrap/main.server.ts",
+            "server": "src/integration/bootstrap/startup/main.server.ts",
             "prerender": true,
             "ssr": {
-              "entry": "src/integration/bootstrap/main.server.ts"
+              "entry": "src/integration/bootstrap/startup/main.server.ts"
             }
-          },          "configurations": {            "production": {
+          },         
+          "configurations": {            
+              "production": {
               "budgets": [
                 {
                   "type": "initial",

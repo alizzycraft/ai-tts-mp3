@@ -4,8 +4,8 @@
     "outDir": "./out-tsc/app",
     "types": []
   },  "files": [
-    "src/integration/bootstrap/main.ts",
-    "src/integration/bootstrap/main.server.ts"
+    "src/integration/bootstrap/startup/main.ts",
+    "src/integration/bootstrap/startup/main.server.ts"
   ],
   "include": [
     "src/**/*.d.ts"

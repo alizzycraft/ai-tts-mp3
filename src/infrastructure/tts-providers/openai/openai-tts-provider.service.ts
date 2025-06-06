@@ -1,0 +1,13 @@
+// Infrastructure implementation of TTS provider service
+import { ITTSProviderService } from '../../../domain/contracts/interfaces/services/tts-provider.interface';
+import { OpenAITTSService } from './openai-tts.service';
+import { TTSSettings, QueryText } from '../../../domain/entities/tts.entity';
+
+export class OpenAITTSProviderService implements ITTSProviderService {
+  private readonly openAIService = new OpenAITTSService();
+
+  async generateSpeech(text: string, settings: TTSSettings): Promise<Uint8Array> {
+    const queryText = QueryText.fromString(text);
+    return this.openAIService.generateSpeech(queryText, settings);
+  }
+}
