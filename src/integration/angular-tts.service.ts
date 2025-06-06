@@ -1,15 +1,13 @@
 import { Injectable, inject } from '@angular/core';
 import { TTSResult, TTSSettings } from './domain-types';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { QueryId, TTSResultStatus } from '../domain/tts.entity'; // Assuming QueryId and TTSResultStatus are in domain/tts.entity
+import { QueryId, TTSResultStatus } from '../domain/entities/tts.entity'; // Assuming QueryId and TTSResultStatus are in domain/tts.entity
 
 @Injectable({
   providedIn: 'root'
 })
 export class AngularTTSService {
-  private http = inject(HttpClient);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async downloadAudio(_result: TTSResult): Promise<string | undefined> {
+  private http = inject(HttpClient);  async downloadAudio(_result: TTSResult): Promise<string | undefined> {
     // Placeholder implementation - Audio playback is handled by AudioPlayerComponent
     // This method might not be strictly necessary if audio is played directly from TTSResult
     // If needed, implement logic to create a Blob URL or similar

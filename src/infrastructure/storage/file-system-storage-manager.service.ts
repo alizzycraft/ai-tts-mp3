@@ -1,26 +1,24 @@
 // File system storage manager - handles enabling/disabling file system storage and folder reconnection
-import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { FileSystemOperationsService } from './file-system-operations.service';
-import { StorageStateService } from './storage-state.service';
+import { StorageStateService } from '../../domain/services/storage-state.service';
 import { StorageMigrationService } from './storage-migration.service';
 import { HistoryManagementService } from './history-management.service';
-import { HistoryItem } from './storage-types';
+import { HistoryItem } from '../../domain/types/storage-types';
 
 @Injectable({
   providedIn: 'root'
 })
 export class FileSystemStorageManagerService {
+  private platformId = inject(PLATFORM_ID);
+  private fileSystemOperations = inject(FileSystemOperationsService);
+  private storageState = inject(StorageStateService);
+  private migration = inject(StorageMigrationService);
+  private historyManagement = inject(HistoryManagementService);
+
   // Flag to ensure initialization happens only once
   private initialized = false;
-
-  constructor(
-    @Inject(PLATFORM_ID) private platformId: object,
-    private fileSystemOperations: FileSystemOperationsService,
-    private storageState: StorageStateService,
-    private migration: StorageMigrationService,
-    private historyManagement: HistoryManagementService
-  ) {}
 
   /** true only when running in a browser (not during SSR) */
   private get isBrowser(): boolean {

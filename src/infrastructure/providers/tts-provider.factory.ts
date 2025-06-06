@@ -1,6 +1,6 @@
 // Infrastructure provider factory for TTS services
-import { ModelProvider } from '../../domain/tts.entity';
-import { TTSProviderService } from '../../domain/tts-provider.interface';
+import { ModelProvider } from '../../domain/entities/tts.entity';
+import { TTSProviderService } from '../../domain/contracts/interfaces/tts-provider.interface';
 import { OpenAITTSProviderService } from './openai/openai-tts-provider.service';
 
 export class TTSProviderFactory {

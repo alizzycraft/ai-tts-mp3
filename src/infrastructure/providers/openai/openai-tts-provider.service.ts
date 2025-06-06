@@ -1,7 +1,7 @@
 // Infrastructure implementation of TTS provider service
-import { TTSProviderService } from '../../../domain/tts-provider.interface';
+import { TTSProviderService } from '../../../domain/contracts/interfaces/tts-provider.interface';
 import { OpenAITTSService } from './openai-tts.service';
-import { TTSSettings, QueryText } from '../../../domain/tts.entity';
+import { TTSSettings, QueryText } from '../../../domain/entities/tts.entity';
 
 export class OpenAITTSProviderService implements TTSProviderService {
   private readonly openAIService = new OpenAITTSService();

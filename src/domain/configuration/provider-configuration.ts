@@ -1,5 +1,5 @@
 // Domain types for provider configuration
-import { ModelProvider } from './tts.entity';
+import { ModelProvider } from '../entities/tts.entity';
 
 export interface ProviderConfiguration {
   provider: ModelProvider;

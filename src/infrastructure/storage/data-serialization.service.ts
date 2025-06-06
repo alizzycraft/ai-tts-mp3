@@ -1,10 +1,10 @@
 // Data Serialization Service - Handles conversion between domain objects and storage formats
 import { Injectable } from '@angular/core';
-import { HistoryItem } from './storage-types';
-import { TTSResult, TTSSettings, TTSResultStatus, ModelProvider } from '../../domain/tts.entity';
-import { QueryId } from '../../domain/value-objects/query-id';
-import { ApiKey } from '../../domain/value-objects/api-key';
-import { ProviderConfiguration } from '../../domain/provider-configuration';
+import { HistoryItem } from '../../domain/types/storage-types';
+import { TTSResult, TTSSettings, TTSResultStatus, ModelProvider } from '../../domain/entities/tts.entity';
+import { QueryId } from '../../common/value-objects/query/query-id';
+import { ApiKey } from '../../common/value-objects/text/api-key';
+import { ProviderConfiguration } from '../../domain/configuration/provider-configuration';
 
 @Injectable({
   providedIn: 'root'

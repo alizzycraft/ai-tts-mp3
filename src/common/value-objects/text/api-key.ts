@@ -1,5 +1,5 @@
 // Domain value object for API Keys
-import { NonEmptyText } from '../../common/value-objects/text';
+import { NonEmptyText } from './text';
 
 export class ApiKey extends NonEmptyText {
   private static readonly MIN_LENGTH = 10;

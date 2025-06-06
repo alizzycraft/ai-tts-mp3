@@ -5,13 +5,11 @@ import {
   TTSSettings, 
   QueryId, 
   TTSResultStatus
-} from '../domain/tts.entity';
-import { 
-  TTSQueryRepository, 
-  TTSResultRepository, 
-  TTSSettingsRepository 
-} from '../domain/tts.repository';
-import { Logger } from '../common/utils';
+} from '../domain/entities/tts.entity';
+import { TTSQueryRepository } from '../domain/contracts/abstracts/repositories/tts-query.repository';
+import { TTSResultRepository } from '../domain/contracts/abstracts/repositories/tts-result.repository';
+import { TTSSettingsRepository } from '../domain/contracts/abstracts/repositories/tts-settings.repository';
+import { Logger } from '../common/utils/logger.util';
 
 // Infrastructure implementation of TTS Query Repository
 @Injectable({

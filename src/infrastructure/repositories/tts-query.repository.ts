@@ -1,8 +1,8 @@
 // Infrastructure implementation of TTS Query Repository
 import { Injectable } from '@angular/core';
-import { TTSQuery, QueryId } from '../../domain/tts.entity';
-import { TTSQueryRepository } from '../../domain/tts.repository';
-import { Logger } from '../../common/utils';
+import { TTSQuery, QueryId } from '../../domain/entities/tts.entity';
+import { TTSQueryRepository } from '../../domain/contracts/abstracts/repositories/tts.repository';
+import { Logger } from '../../common/utils/logger.util';
 
 @Injectable({
   providedIn: 'root'

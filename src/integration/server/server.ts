@@ -20,9 +20,10 @@ export function createExpressServer() {
   // Serve static files from /browser
   app.get('*.*', express.static(browserDistFolder, {
     maxAge: '1y'
-  }));    // All regular routes use the Angular engine with timeout handling
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  app.get('*', async (req, res, _next) => {
+  }));
+
+  // All regular routes use the Angular engine with timeout handling
+  app.get('*', async (req, res) => {
     const { protocol, originalUrl, baseUrl, headers } = req;
     
     try {

@@ -1,8 +1,8 @@
 // Integration layer monitoring service - now using focused monitoring services
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { MonitoringService as CoreMonitoring } from './monitoring/monitoring.service';
 import { ProviderMonitoringService } from './monitoring/provider-monitoring.service';
-import { ModelProvider } from '../domain/tts.entity';
+import { ModelProvider } from '../domain/entities/tts.entity';
 import { ProviderHealthMetrics } from './monitoring/provider-monitoring.service';
 
 // Re-export types for backward compatibility
@@ -15,10 +15,9 @@ export type { ProviderHealthMetrics };
   providedIn: 'root'
 })
 export class MonitoringService {
-  constructor(
-    private coreMonitoring: CoreMonitoring,
-    private providerMonitoring: ProviderMonitoringService
-  ) {}
+  private coreMonitoring = inject(CoreMonitoring);
+  private providerMonitoring = inject(ProviderMonitoringService);
+
 
   // Provider-specific monitoring methods
   recordHealthCheck(provider: ModelProvider, isHealthy: boolean): void {

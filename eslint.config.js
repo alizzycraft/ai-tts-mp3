@@ -60,6 +60,14 @@ module.exports = tseslint.config(
         {
           "selector": "CallExpression[callee.name='computed'] CallExpression[callee.property.name=/^(subscribe|observe|then)$/]",
           "message": "Avoid using non-reactive patterns inside computed signals."
+        },
+        {
+          "selector": "TSTypeReference[typeName.name='Observable']",
+          "message": "Use Signal<T> instead of Observable<T> in this signal-first codebase"
+        },
+        {
+          "selector": "Identifier[name=/.*\\$$/]",
+          "message": "Property names ending with $ (indicating Observables) should be replaced with signal-based patterns"
         }
       ],
       
@@ -73,6 +81,36 @@ module.exports = tseslint.config(
         ]
       }],
 
+
+      "@typescript-eslint/no-explicit-any": "error",
+
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          "argsIgnorePattern": "^_",
+          "varsIgnorePattern": "^_",
+          "caughtErrorsIgnorePattern": "^_"
+        }
+      ],
+
+      "@typescript-eslint/no-empty-function": [
+        "error",
+        {
+          "allow": ["arrowFunctions", "functions", "methods"]
+        }
+      ],
+
+      "@typescript-eslint/no-unused-expressions": [
+        "error",
+        {
+          "allowShortCircuit": true,
+          "allowTernary": true,
+          "allowTaggedTemplates": true
+        }
+      ],
+
+      "@typescript-eslint/no-unsafe-argument": "error",
+
       "@typescript-eslint/naming-convention": [
         "error",
         {
@@ -83,8 +121,27 @@ module.exports = tseslint.config(
             "regex": "^(effect|subscribe|observe|promise|async|Observable|setTimeout|runInInjectionContext|queueMicrotask|ChangeDetectorRef)",
             "match": false
           }
+        },
+        {
+          "selector": ["property", "classProperty", "typeProperty", "parameter", "interface"],
+          "format": null,
+          "failureMessage": "Types containing Observable or Subject should use Signal<T> instead",
+          "filter": {
+            "regex": ".*(Observable|Subject).*",
+            "match": true
+          }
+        },
+        {
+          "selector": ["property", "classProperty", "typeProperty"],
+          "format": null,
+          "failureMessage": "Properties ending with $ should be converted to use signals",
+          "filter": {
+            "regex": ".*\\$$",
+            "match": true
+          }
         }
       ],
+      "semi": ["error", "always"],
       
       "import/no-restricted-paths": [
         "error",

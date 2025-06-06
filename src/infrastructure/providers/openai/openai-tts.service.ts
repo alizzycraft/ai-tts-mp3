@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
-import { TTSSettings, QueryText, ModelProvider } from '../../../domain/tts.entity';
-import { ProviderError, ProviderErrorType } from '../../../domain/provider.entity';
-import { Logger } from '../../../common/utils';
+import { TTSSettings, QueryText, ModelProvider } from '../../../domain/entities/tts.entity';
+import { ProviderError, ProviderErrorType } from '../../../domain/entities/provider.entity';
+import { Logger } from '../../../common/utils/logger.util';
 
 export interface OpenAITTSRequest {
   model: string;

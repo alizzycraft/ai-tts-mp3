@@ -1,23 +1,21 @@
 // Storage Migration Service - Handles data migration between storage systems
-import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { HistoryItem } from './storage-types';
+import { HistoryItem } from '../../domain/types/storage-types';
 import { DataSerializationService } from './data-serialization.service';
 import { FileSystemOperationsService } from './file-system-operations.service';
-import { FileSystemStorageState } from './storage-state.service';
+import { FileSystemStorageState } from '../../domain/services/storage-state.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class StorageMigrationService {
+  private platformId = inject(PLATFORM_ID);
+  private serializationService = inject(DataSerializationService);
+  private fileSystemOperations = inject(FileSystemOperationsService);
+
   private readonly STORAGE_KEY = 'tts-history';
   private readonly METADATA_FILE = 'history-metadata.json';
-
-  constructor(
-    @Inject(PLATFORM_ID) private platformId: object,
-    private serializationService: DataSerializationService,
-    private fileSystemOperations: FileSystemOperationsService
-  ) {}
 
   /** true only when running in a browser (not during SSR) */
   private get isBrowser(): boolean {

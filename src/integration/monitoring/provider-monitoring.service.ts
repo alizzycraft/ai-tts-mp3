@@ -1,9 +1,9 @@
 // Provider-specific monitoring service to break circular dependencies
-import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { signal, computed } from '@angular/core';
 import { LoggingService } from '../logging.service';
-import { ModelProvider } from '../../domain/tts.entity';
-import { Result } from '../../common/result';
+import { ModelProvider } from '../../domain/entities/tts.entity';
+import { Result } from '../../common/value-objects/query/result';
 import { isPlatformBrowser } from '@angular/common';
 
 export interface ProviderHealthMetrics {
@@ -18,6 +18,9 @@ export interface ProviderHealthMetrics {
   providedIn: 'root'
 })
 export class ProviderMonitoringService {
+  private logging = inject(LoggingService);
+  private platformId = inject(PLATFORM_ID);
+
   // Provider health state
   private readonly healthStatus = signal<Map<ModelProvider, boolean>>(new Map());
   private readonly providerMetrics = signal<Map<ModelProvider, ProviderHealthMetrics>>(new Map());
@@ -33,10 +36,7 @@ export class ProviderMonitoringService {
     return health;
   });
 
-  constructor(
-    private logging: LoggingService,
-    @Inject(PLATFORM_ID) private platformId: object
-  ) {
+  constructor() {
     if (!this.initialized() && isPlatformBrowser(this.platformId)) {
       this.initialized.set(true);
       this.logging.info('ProviderMonitoringService initialized', 'ProviderMonitoring');

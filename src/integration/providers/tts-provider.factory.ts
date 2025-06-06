@@ -1,7 +1,7 @@
 // Integration layer TTS provider factory with dependency injection
-import { Injectable } from '@angular/core';
-import { ModelProvider, TTSSettings, TTSResult, QueryId } from '../../domain/tts.entity';
-import { Result } from '../../common/result';
+import { Injectable, inject } from '@angular/core';
+import { ModelProvider, TTSSettings, TTSResult, QueryId } from '../../domain/entities/tts.entity';
+import { Result } from '../../common/value-objects/query/result';
 import { LoggingService } from '../logging.service';
 import { ProviderMonitoringService } from '../monitoring/provider-monitoring.service';
 
@@ -46,17 +46,17 @@ export interface GoogleSettings extends TTSSettings {
   providedIn: 'root'
 })
 export class TTSProviderFactory {
+  private logging = inject(LoggingService);
+  private providerMonitoring = inject(ProviderMonitoringService);
+  private elevenLabsService = inject(ElevenLabsTTSService);
+  private azureService = inject(AzureTTSService);
+  private googleService = inject(GoogleTTSService);
+  private awsPollyService = inject(AWSPollyTTSService);
+  private openaiService = inject(OpenAITTSProviderService);
+
   private readonly providers = new Map<ModelProvider, TTSProvider>();
 
-  constructor(
-    private logging: LoggingService,
-    private providerMonitoring: ProviderMonitoringService,
-    private elevenLabsService: ElevenLabsTTSService,
-    private azureService: AzureTTSService,
-    private googleService: GoogleTTSService,
-    private awsPollyService: AWSPollyTTSService,
-    private openaiService: OpenAITTSProviderService
-  ) {
+  constructor() {
     // Providers will be available through DI, just create the map for lookup
     this.providers.set(ModelProvider.OPENAI, this.openaiService);
     this.providers.set(ModelProvider.ELEVENLABS, this.elevenLabsService);

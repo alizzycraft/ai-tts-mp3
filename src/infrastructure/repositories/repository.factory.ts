@@ -1,6 +1,6 @@
 // Repository Factory for TTS Domain
 import { Injectable } from '@angular/core';
-import { TTSQueryRepository, TTSResultRepository, TTSSettingsRepository } from '../../domain/tts.repository';
+import { TTSQueryRepository, TTSResultRepository, TTSSettingsRepository } from '../../domain/contracts/abstracts/repositories/tts.repository';
 import { InMemoryTTSQueryRepository } from './tts-query.repository';
 import { InMemoryTTSResultRepository } from './tts-result.repository';
 import { LocalStorageTTSSettingsRepository } from './tts-settings.repository';

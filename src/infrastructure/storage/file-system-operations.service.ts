@@ -1,5 +1,5 @@
 // File System Operations Service - Handles File System Access API operations
-import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 
 // Polyfill for DirectoryPickerOptions if not present
@@ -28,7 +28,8 @@ interface ExtendedFileSystemFileHandle extends FileSystemFileHandle {
   providedIn: 'root'
 })
 export class FileSystemOperationsService {
-  constructor(@Inject(PLATFORM_ID) private platformId: object) {}
+  private platformId = inject(PLATFORM_ID);
+
 
   /** true only when running in a browser (not during SSR) */
   private get isBrowser(): boolean {

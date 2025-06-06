@@ -1,6 +1,7 @@
-import { Component, signal, computed, output, input, Inject, inject } from '@angular/core';
+import { Component, signal, computed, output, input, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ReconnectionPromptModalComponent } from '../shared/reconnection-prompt-modal.component';
 import { HISTORY_STORAGE_TOKEN } from '../../integration/tokens';
 import { IHistoryStorage } from '../../integration/interfaces';
 import { ModalService } from '../shared/modal.service';
@@ -24,6 +25,9 @@ import { HistoryInteractionManagerService } from '../home/services/history-inter
   styleUrls: ['./history-panel.component.scss']
 })
 export class HistoryPanelComponent {
+  private historyService = inject<IHistoryStorage>(HISTORY_STORAGE_TOKEN);
+  private modalService = inject(ModalService);
+
   private historyInteractionManager = inject(HistoryInteractionManagerService);
   
   // Outputs for parent component communication
@@ -87,10 +91,7 @@ export class HistoryPanelComponent {
       itemCount: items.length,
       folderName: fileSystem.selectedPath || undefined
     };
-  });  constructor(
-    @Inject(HISTORY_STORAGE_TOKEN) private historyService: IHistoryStorage,
-    private modalService: ModalService
-  ) {
+  });  constructor() {
     // Set up signal monitoring for reconnection prompts
     // This will monitor the signal value and show modal when needed
     this.monitorReconnectionPrompt();
@@ -127,7 +128,7 @@ export class HistoryPanelComponent {
   private showReconnectionModal(prompt: FolderReconnectionPrompt): void {
     this.modalService.showComponent({
       type: 'component',
-      componentType: 'ReconnectionPromptModal',
+      componentType: ReconnectionPromptModalComponent,
       data: prompt,
       allowDismiss: false
     });

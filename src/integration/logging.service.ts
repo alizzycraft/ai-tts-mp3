@@ -1,6 +1,7 @@
 // Integration layer logging and monitoring service
-import { Injectable } from '@angular/core';
-import { Logger as BaseLogger } from '../common/utils';
+import { Injectable, inject, PLATFORM_ID } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { Logger as BaseLogger } from '../common/utils/logger.util';
 
 export enum LogLevel {
   DEBUG = 0,
@@ -36,14 +37,16 @@ export interface LogMetrics {
   providedIn: 'root'
 })
 export class LoggingService {
+  private readonly platformId = inject(PLATFORM_ID);
+  
   private logs: LogEntry[] = [];
   private maxLogSize = 1000;
   private sessionId = this.generateSessionId();
   private performanceData: { timestamp: Date; duration: number; success: boolean }[] = [];
 
   constructor() {
-    // Only set up log cleanup interval in the browser
-    if (typeof window !== 'undefined') {
+    // Only set up log cleanup interval in browser environment
+    if (isPlatformBrowser(this.platformId)) {
       setInterval(() => this.cleanupLogs(), 60000); // Every minute
     }
   }

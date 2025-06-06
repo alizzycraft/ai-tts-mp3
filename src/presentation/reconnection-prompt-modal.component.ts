@@ -1,6 +1,6 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ModalService } from '../common/modal.service';
+import { ModalService } from './shared/modal.service';
 import { IntegratedHistoryStorageService } from '../integration/history-storage.service';
 import { FolderReconnectionPrompt } from '../integration/domain-types';
 
@@ -17,7 +17,7 @@ import { FolderReconnectionPrompt } from '../integration/domain-types';
         <p>You previously enabled unlimited storage using this folder:</p>
         <div class="folder-info">
           <img src="assets/icons/outline/folder-down.svg" width="20" height="20" class="inline-icon" alt="Folder">
-          <span class="folder-name">{{ promptData.previousPath }}</span>
+          <span class="folder-name">{{ promptData().previousPath }}</span>
         </div>
         <p>Would you like to reconnect to this folder to access your saved history?</p>
         <div *ngIf="error()" class="error-message">{{ error() }}</div>
@@ -72,11 +72,14 @@ import { FolderReconnectionPrompt } from '../integration/domain-types';
 })
 export class ReconnectionPromptModalComponent {
   modalService = inject(ModalService);
-  historyService = inject(IntegratedHistoryStorageService);
-  // Use the data provided by ModalService, fallback to default if missing
-  get promptData(): FolderReconnectionPrompt {
-    return (this.modalService.data() as FolderReconnectionPrompt) ?? { previousPath: '', shouldPrompt: true };
-  }
+  historyService = inject(IntegratedHistoryStorageService);  // Use the data provided by ModalService, fallback to default if missing
+  readonly promptData = computed(() => {
+    const data = this.modalService.data();
+    if (data && typeof data === 'object' && 'previousPath' in data && 'shouldPrompt' in data) {
+      return data as FolderReconnectionPrompt;
+    }
+    return { previousPath: '', shouldPrompt: true };
+  });
   error = signal<string | null>(null);
   reconnecting = signal(false);
 

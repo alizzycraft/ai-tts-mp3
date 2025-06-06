@@ -1,6 +1,6 @@
 // Domain value object for TTS Query Text
-import { BoundedText } from '../../common/value-objects/text';
-import { StringUtil } from '../../common/utils';
+import { BoundedText } from './text';
+import { StringUtil } from '../../utils/string.util';
 
 export class QueryText extends BoundedText {
   // TTS-specific text length limits

@@ -1,14 +1,14 @@
 // Integration layer wrapper for history storage
-import { Injectable, Inject, PLATFORM_ID, Signal } from '@angular/core';
+import { Injectable, PLATFORM_ID, Signal, inject } from '@angular/core';
 import { 
   HistoryItem, 
   StorageInfo 
-} from '../infrastructure/storage/storage-types';
+} from '../domain/types/storage-types';
 import { HistoryManagementService } from '../infrastructure/storage/history-management.service';
 import { FileSystemStorageManagerService } from '../infrastructure/storage/file-system-storage-manager.service';
-import { StorageStateService, FileSystemStorageState, FolderReconnectionPrompt } from '../infrastructure/storage/storage-state.service';
+import { StorageStateService, FileSystemStorageState, FolderReconnectionPrompt } from '../domain/services/storage-state.service';
 import { StorageInfoService } from '../infrastructure/storage/storage-info.service';
-import { TTSSettings, TTSResult } from '../domain/tts.entity';
+import { TTSSettings, TTSResult } from '../domain/entities/tts.entity';
 import { LoggingService } from './logging.service';
 import { MonitoringService } from './monitoring.service';
 import { isPlatformBrowser } from '@angular/common';
@@ -18,6 +18,14 @@ import { IHistoryStorage } from './interfaces';
   providedIn: 'root'
 })
 export class IntegratedHistoryStorageService implements IHistoryStorage {
+  private platformId = inject(PLATFORM_ID);
+  private logging = inject(LoggingService);
+  private monitoring = inject(MonitoringService);
+  private historyManagement = inject(HistoryManagementService);
+  private fileSystemManager = inject(FileSystemStorageManagerService);
+  private storageStateService = inject(StorageStateService);
+  private storageInfoService = inject(StorageInfoService);
+
   private initialized = false;
 
   // Expose signals as per IHistoryStorage interface
@@ -26,15 +34,7 @@ export class IntegratedHistoryStorageService implements IHistoryStorage {
   readonly fileSystem: Signal<FileSystemStorageState>;
   readonly reconnection: Signal<FolderReconnectionPrompt | null>;
 
-  constructor(
-    @Inject(PLATFORM_ID) private platformId: object,
-    private logging: LoggingService,
-    private monitoring: MonitoringService,
-    private historyManagement: HistoryManagementService,
-    private fileSystemManager: FileSystemStorageManagerService,
-    private storageStateService: StorageStateService,
-    private storageInfoService: StorageInfoService
-  ) {
+  constructor() {
     // Initialize signals directly from services
     this.items = this.historyManagement.history;
     this.storage = this.storageInfoService.storageInfo;

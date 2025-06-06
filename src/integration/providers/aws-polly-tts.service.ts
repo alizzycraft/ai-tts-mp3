@@ -1,9 +1,9 @@
 // AWS Polly TTS provider implementation
-import { Injectable, signal, computed, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, signal, computed, PLATFORM_ID, inject } from '@angular/core';
 import { LoggingService } from '../logging.service';
-import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus } from '../../domain/tts.entity';
-import { Result } from '../../common/result';
-import { ApiKey } from '../../domain/value-objects/api-key';
+import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus } from '../../domain/entities/tts.entity';
+import { Result } from '../../common/value-objects/query/result';
+import { ApiKey } from '../../common/value-objects/text/api-key';
 import { ProviderHealthMetrics, ProviderMonitoringService } from '../monitoring/provider-monitoring.service';
 import { isPlatformBrowser } from '@angular/common';
 
@@ -53,6 +53,10 @@ export interface AWSSSMLOptions {
   providedIn: 'root'
 })
 export class AWSPollyTTSService {
+  private logging = inject(LoggingService);
+  private providerMonitoring = inject(ProviderMonitoringService);
+  private platformId = inject(PLATFORM_ID);
+
   private readonly baseUrl = 'https://polly.{{region}}.amazonaws.com';
   
   // Reactive signals for state management
@@ -108,11 +112,7 @@ export class AWSPollyTTSService {
     this.updateProviderHealth();
     return status;
   });
-  constructor(
-    private logging: LoggingService,
-    private providerMonitoring: ProviderMonitoringService,
-    @Inject(PLATFORM_ID) private platformId: object
-  ) {
+  constructor() {
     if (!this.initialized() && isPlatformBrowser(this.platformId)) {
       this.initialized.set(true);
       this.logging.info('AWSPollyTTSService initialized', 'AWS');
@@ -232,8 +232,11 @@ export class AWSPollyTTSService {
             throw new Error(`Failed to fetch voices: ${response.status} ${response.statusText} - ${errorText}`);
           }
 
-          const data = await response.json();
-          const voices = this.transformPollyVoices(data.Voices || []);
+          const data = await response.json();          if (!data || !Array.isArray(data.Voices)) {
+            throw new Error('Invalid response format from AWS Polly API');
+          }
+
+          const voices = this.transformPollyVoices(data.Voices as unknown[]);
           this.cachedVoices.set(voices);
 
           this.logging.info(`Retrieved ${voices.length} AWS Polly voices`, 'AWS');
@@ -446,17 +449,37 @@ export class AWSPollyTTSService {
       headers,
       body: body ? JSON.stringify(body) : undefined
     });
-  }  private transformPollyVoices(pollyVoices: Record<string, unknown>[]): AWSVoice[] {
-    return pollyVoices.map(voice => ({
-      id: voice['Id'] as string,
-      name: voice['Name'] as string,
-      languageCode: voice['LanguageCode'] as string,
-      languageName: voice['LanguageName'] as string,
-      gender: voice['Gender'] as 'Male' | 'Female',
-      engine: (voice['SupportedEngines'] as string[])?.includes('neural') ? 'neural' : 'standard',
-      supportedEngines: (voice['SupportedEngines'] as ('standard' | 'neural')[]) || ['standard'],
-      additionalLanguageCodes: voice['AdditionalLanguageCodes'] as string[]
-    }));
+  }  private transformPollyVoices(awsVoices: unknown[]): AWSVoice[] {
+    return awsVoices
+      .filter((voice): voice is Record<string, unknown> => (
+        typeof voice === 'object' && 
+        voice !== null
+      ))
+      .filter(voice => (
+        typeof voice['Id'] === 'string' &&
+        typeof voice['Name'] === 'string' &&
+        typeof voice['LanguageCode'] === 'string' &&
+        typeof voice['LanguageName'] === 'string' &&
+        (voice['Gender'] === 'Male' || voice['Gender'] === 'Female') &&
+        (voice['SupportedEngines'] === undefined || 
+          (Array.isArray(voice['SupportedEngines']) && 
+           voice['SupportedEngines'].every(engine => 
+             engine === 'standard' || engine === 'neural'
+           ))) &&
+        (voice['AdditionalLanguageCodes'] === undefined || Array.isArray(voice['AdditionalLanguageCodes']))
+      ))
+      .map(voice => ({
+        id: voice['Id'] as string,
+        name: voice['Name'] as string,
+        languageCode: voice['LanguageCode'] as string,
+        languageName: voice['LanguageName'] as string,
+        gender: voice['Gender'] as 'Male' | 'Female',
+        engine: (voice['Engine'] as string === 'neural' ? 'neural' : 'standard'),
+        supportedEngines: (voice['SupportedEngines'] as string[])?.map(
+          engine => engine === 'neural' ? 'neural' : 'standard'
+        ) ?? ['standard'],
+        additionalLanguageCodes: voice['AdditionalLanguageCodes'] as string[] | undefined
+      }));
   }
   private extractRegionFromSettings(settings: AWSPollySettings): string | null {
     // Try to extract region from custom endpoint

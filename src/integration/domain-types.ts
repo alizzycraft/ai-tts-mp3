@@ -8,14 +8,14 @@ export type {
   TTSQuery,
   QueryId,
   QueryText
-} from '../domain/tts.entity';
-export { ModelProvider, TTSResultStatus, ApiKey, Voice } from '../domain/tts.entity';
+} from '../domain/entities/tts.entity';
+export { ModelProvider, TTSResultStatus, ApiKey, Voice } from '../domain/entities/tts.entity';
 
 // Export from provider.entity
-export type { ProviderError } from '../domain/provider.entity';
+export type { ProviderError } from '../domain/entities/provider.entity';
 
 // Types for storage services
-import { HistoryItem, StorageInfo } from '../infrastructure/storage/storage-types';
-import { FileSystemStorageState, FolderReconnectionPrompt } from '../infrastructure/storage/storage-state.service';
+import { HistoryItem, StorageInfo } from '../domain/types/storage-types';
+import { FileSystemStorageState, FolderReconnectionPrompt } from '../domain/services/storage-state.service';
 
 export type { HistoryItem, StorageInfo, FileSystemStorageState, FolderReconnectionPrompt };

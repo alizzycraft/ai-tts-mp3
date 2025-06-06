@@ -1,7 +1,7 @@
 // Integration layer error handling and monitoring service
-import { Injectable } from '@angular/core';
-import { ProviderError, ProviderErrorType } from '../domain/provider.entity';
-import { Result } from '../common/result';
+import { Injectable, inject } from '@angular/core';
+import { ProviderError, ProviderErrorType } from '../domain/entities/provider.entity';
+import { Result } from '../common/value-objects/query/result';
 import { LoggingService } from './logging.service';
 
 export interface ErrorContext {
@@ -28,10 +28,10 @@ export interface ErrorReport {
   providedIn: 'root'
 })
 export class ErrorHandlingService {
+  private logging = inject(LoggingService);
+
   private errorReports: ErrorReport[] = [];
   private readonly maxReports = 100;
-
-  constructor(private logging: LoggingService) {}
 
   handleProviderError(
     error: ProviderError,

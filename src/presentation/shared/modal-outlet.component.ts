@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, ChangeDetectionStrategy, HostListener, AfterViewInit, ElementRef } from '@angular/core';
+import { Component, ChangeDetectionStrategy, HostListener, AfterViewInit, ElementRef, inject } from '@angular/core';
 import { ModalService } from './modal.service';
 import { ReconnectionPromptModalComponent } from './reconnection-prompt-modal.component';
 
@@ -7,7 +7,8 @@ import { ReconnectionPromptModalComponent } from './reconnection-prompt-modal.co
   selector: 'app-modal-outlet',
   standalone: true,
   imports: [CommonModule, ReconnectionPromptModalComponent],
-  template: `    @if (modalService.isOpen()) {
+  template: `    
+    @if (modalService.isOpen()) {
       <div 
         class="modal-backdrop" 
         (click)="onBackdropClick($event)"
@@ -18,7 +19,7 @@ import { ReconnectionPromptModalComponent } from './reconnection-prompt-modal.co
         tabindex="-1">
         @if (modalService.template()) {
           <ng-container *ngTemplateOutlet="modalService.template()!"></ng-container>
-        } @else if (modalService.componentType() === 'ReconnectionPromptModal' && modalService.data()) {
+        } @else if (modalService.componentType()) {
           <app-reconnection-prompt-modal></app-reconnection-prompt-modal>
         }
       </div>
@@ -43,19 +44,19 @@ import { ReconnectionPromptModalComponent } from './reconnection-prompt-modal.co
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ModalOutletComponent implements AfterViewInit {
-  private previousActiveElement: HTMLElement | null = null;
+  modalService = inject(ModalService);
+  private elementRef = inject(ElementRef);
 
-  constructor(
-    public modalService: ModalService,
-    private elementRef: ElementRef
-  ) {}
+  private previousActiveElement: HTMLElement | null = null;
 
   ngAfterViewInit(): void {
     if (this.modalService.isOpen()) {
       this.previousActiveElement = document.activeElement as HTMLElement;
       this.focusFirstElement();
     }
-  }  getAriaLabel(): string {
+  }
+
+  getAriaLabel(): string {
     return this.modalService.title() || 'Modal dialog';
   }
 
@@ -76,11 +77,19 @@ export class ModalOutletComponent implements AfterViewInit {
   }
 
   private getFocusableElements(): HTMLElement[] {
-    if (!this.elementRef.nativeElement) return [];
+    const element = this.elementRef.nativeElement;
+    if (!element || !element.querySelectorAll) return [];    const focusableElementsSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    // Explicitly type the NodeList
+    const elements: NodeListOf<Element> = element.querySelectorAll(focusableElementsSelector);
+    
+    // Safe type guard function
+    const isHTMLElement = (el: Element): el is HTMLElement => {
+      return el instanceof HTMLElement;
+    };
 
-    return Array.from(this.elementRef.nativeElement.querySelectorAll(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    )) as HTMLElement[];
+    // Convert NodeList to Array<Element> and then filter to HTMLElements
+    // Using explicit type annotation to ensure type safety
+    return Array.from<Element>(elements).filter(isHTMLElement);
   }
 
   @HostListener('window:keydown', ['$event'])

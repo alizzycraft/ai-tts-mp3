@@ -1,9 +1,10 @@
 // Google Cloud Text-to-Speech provider implementation
-import { Injectable, signal, computed, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, signal, computed, PLATFORM_ID, inject } from '@angular/core';
 import { LoggingService } from '../logging.service';
-import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus } from '../../domain/tts.entity';
-import { Result } from '../../common/result';
+import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus } from '../../domain/entities/tts.entity';
+import { Result } from '../../common/value-objects/query/result';
 import { ProviderHealthMetrics, ProviderMonitoringService } from '../monitoring/provider-monitoring.service';
+import { ApiKey } from '../../common/value-objects/text/api-key';
 import { isPlatformBrowser } from '@angular/common';
 
 export interface GoogleVoice {
@@ -43,6 +44,10 @@ export interface GoogleTTSRequest {
   providedIn: 'root'
 })
 export class GoogleTTSService {
+  private logging = inject(LoggingService);
+  private providerMonitoring = inject(ProviderMonitoringService);
+  private platformId = inject(PLATFORM_ID);
+
   private readonly baseUrl = 'https://texttospeech.googleapis.com/v1';
 
   // Reactive state with signals
@@ -89,11 +94,7 @@ export class GoogleTTSService {
     if (rate >= 95) return 'healthy';
     if (rate >= 80) return 'degraded';
     return 'unhealthy';
-  });  constructor(
-    private logging: LoggingService,
-    private providerMonitoring: ProviderMonitoringService,
-    @Inject(PLATFORM_ID) private platformId: object
-  ) {
+  });  constructor() {
     if (!this.initialized() && isPlatformBrowser(this.platformId)) {
       this.initialized.set(true);
       this.logging.info('GoogleTTSService initialized', 'Google');
@@ -194,12 +195,53 @@ export class GoogleTTSService {
           if (!response.ok) {
             throw new Error(`Failed to fetch voices: ${response.status} ${response.statusText}`);
           }
-
+          
           const data = await response.json();
-          this.cachedVoices.set(data.voices);
+          if (!data || !Array.isArray(data.voices)) {
+            throw new Error('Invalid response format from Google API');
+          }          // Type guard to validate top-level response structure
+          const isValidResponse = (data: unknown): data is { voices: unknown[] } => {
+            return typeof data === 'object' && 
+                   data !== null && 
+                   Array.isArray((data as Record<string, unknown>)['voices']);
+          };
 
-          this.logging.info(`Retrieved ${this.cachedVoices()!.length} Google voices`, 'Google');
-          return Result.success(this.cachedVoices()!);
+          // Type guard to validate voice data structure
+          const isValidGoogleVoice = (v: unknown): v is GoogleVoice => {
+            if (typeof v !== 'object' || v === null) return false;
+            const voice = v as Record<string, unknown>;
+            
+            // Validate languageCodes array
+            if (!Array.isArray(voice['languageCodes']) || 
+                !voice['languageCodes'].every(code => typeof code === 'string')) {
+              return false;
+            }
+
+            // Validate name
+            if (typeof voice['name'] !== 'string') return false;
+
+            // Validate ssmlGender
+            if (typeof voice['ssmlGender'] !== 'string' ||
+                !['MALE', 'FEMALE', 'NEUTRAL'].includes(voice['ssmlGender'])) {
+              return false;
+            }
+
+            // Validate naturalSampleRateHertz
+            if (typeof voice['naturalSampleRateHertz'] !== 'number') return false;
+
+            return true;
+          };
+
+          if (!isValidResponse(data)) {
+            throw new Error('Invalid response format from Google TTS API');
+          }
+
+          // Filter and transform valid voices
+          const voices = data.voices.filter(isValidGoogleVoice);
+          this.cachedVoices.set(voices);
+
+          this.logging.info(`Retrieved ${voices.length} Google voices`, 'Google');
+          return Result.success(voices);
 
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to fetch voices';
@@ -327,15 +369,33 @@ export class GoogleTTSService {
   }
 
   // Private helper methods
-  private async makeTextToSpeechRequest(text: string, settings: TTSSettings): Promise<Uint8Array> {
-    const voice = settings.voice || 'en-US-Standard-J';
-    const languageCode = this.extractLanguageFromVoice(voice);
+  private extractLanguageFromVoice(voice: string | undefined): string {
+    // Handle undefined/null case
+    if (!voice) return 'en-US';
 
+    // Extract language code from voice name (e.g., "en-US-Standard-J" -> "en-US")
+    const match = voice.match(/^([a-z]{2,3}-[A-Z]{2})/);
+    if (!match) {
+      this.logging.warn('Invalid voice name format, using default', 'Google', { voice });
+      return 'en-US';
+    }
+
+    return match[1];
+  }
+
+  private async makeTextToSpeechRequest(text: string, settings: TTSSettings): Promise<Uint8Array> {
+    // Ensure voice is a valid string
+    const voiceName = settings.voice || 'en-US-Standard-J';
+    if (typeof voiceName !== 'string') {
+      throw new Error('Invalid voice name format');
+    }
+
+    const languageCode = this.extractLanguageFromVoice(voiceName);
     const requestBody: GoogleTTSRequest = {
       input: { text },
       voice: {
         languageCode,
-        name: voice
+        name: voiceName
       },
       audioConfig: {
         audioEncoding: 'MP3',
@@ -361,31 +421,21 @@ export class GoogleTTSService {
 
     const data = await response.json();
     
-    if (!data.audioContent) {
-      throw new Error('No audio content received from Google API');
+    // Type guard for Google API response
+    const isValidGoogleResponse = (resp: unknown): resp is { audioContent: string } => {
+      return typeof resp === 'object' && 
+             resp !== null && 
+             typeof (resp as { audioContent?: unknown }).audioContent === 'string';
+    };
+    
+    if (!isValidGoogleResponse(data)) {
+      throw new Error('Invalid response format from Google API');
     }
 
     // Google returns base64 encoded audio
-    const audioData = Uint8Array.from(atob(data.audioContent), c => c.charCodeAt(0));
+    const audioData = Uint8Array.from(atob(data.audioContent), (c: string) => c.charCodeAt(0));
     return audioData;
   }
-
-  private extractLanguageFromVoice(voice?: string): string {
-    if (!voice) {
-      return 'en-US';
-    }
-
-    // Extract language code from voice name (e.g., "en-US-Standard-J" -> "en-US")
-    const match = voice.match(/^([a-z]{2,3}-[A-Z]{2})/);
-    return match ? match[1] : 'en-US';
-  }
-
-  private estimateAudioDuration(audioData: Uint8Array): number {
-    // Rough estimation for MP3: assumes 64kbps bitrate (Google default)
-    const bytesPerSecond = 64 * 1024 / 8; // 64kbps in bytes per second
-    return Math.round(audioData.byteLength / bytesPerSecond);
-  }
-
   private updateProviderHealth(): void {
     const status = !this.isValidated() ? "unconfigured" as const
       : this.successRate() < 80 ? "unhealthy" as const
@@ -401,5 +451,22 @@ export class GoogleTTSService {
     };
 
     this.providerMonitoring.updateProviderMetrics(ModelProvider.GOOGLE, metrics);
+  }
+
+  private estimateAudioDuration(audioData: Uint8Array): number {
+    // Rough estimation for MP3: assumes 64kbps bitrate (Google default)
+    const bytesPerSecond = 64 * 1024 / 8; // 64kbps in bytes per second
+    return Math.round(audioData.byteLength / bytesPerSecond);
+  }
+
+  private isValidTTSSettings(settings: unknown): settings is TTSSettings {
+    if (!settings || typeof settings !== 'object') return false;
+    const s = settings as Record<string, unknown>;
+    return (
+      typeof s['provider'] === 'string' &&
+      typeof s['model'] === 'string' &&
+      typeof s['voice'] === 'string' &&
+      (!s['apiKey'] || s['apiKey'] instanceof ApiKey)
+    );
   }
 }

@@ -1,5 +1,5 @@
 // Alert service focused on system alerting and notifications
-import { Injectable, Inject, PLATFORM_ID, signal, computed } from '@angular/core';
+import { Injectable, PLATFORM_ID, signal, computed, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { LoggingService } from '../logging.service';
 import { ApplicationMetrics } from './metrics-collection.service';
@@ -30,7 +30,9 @@ export interface AlertRule {
   providedIn: 'root'
 })
 export class AlertService {
-  private isBrowser = false;
+  private readonly logging = inject(LoggingService);
+  private readonly platformId = inject(PLATFORM_ID);
+  private readonly isBrowser = isPlatformBrowser(this.platformId);
 
   // Keep last 100 alerts
   private readonly MAX_ALERTS = 100;
@@ -71,11 +73,7 @@ export class AlertService {
     };
   });
 
-  constructor(
-    @Inject(PLATFORM_ID) platformId: object,
-    private logging: LoggingService
-  ) {
-    this.isBrowser = isPlatformBrowser(platformId);
+  constructor() {
     this.initializeDefaultRules();
 
     if (this.isBrowser) {

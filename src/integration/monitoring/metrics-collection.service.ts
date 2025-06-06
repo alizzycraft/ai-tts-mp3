@@ -1,9 +1,9 @@
 // Metrics collection service focused on application performance metrics
-import { Injectable, Inject, PLATFORM_ID, signal, computed } from '@angular/core';
+import { Injectable, PLATFORM_ID, signal, computed, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { LoggingService, LogLevel } from '../logging.service';
-import { ModelProvider } from '../../domain/tts.entity';
-import { FEATURE_FLAGS } from '../../domain/feature-flags';
+import { ModelProvider } from '../../domain/entities/tts.entity';
+import { FEATURE_FLAGS } from '../../domain/configuration/feature-flags';
 
 export interface ApplicationMetrics {
   requests: {
@@ -61,6 +61,8 @@ export interface ProviderMetricData {
   providedIn: 'root'
 })
 export class MetricsCollectionService {
+  private logging = inject(LoggingService);
+
   private startTime = new Date();
   private isBrowser = false;
 
@@ -136,10 +138,9 @@ export class MetricsCollectionService {
     };
   });
 
-  constructor(
-    @Inject(PLATFORM_ID) platformId: object,
-    private logging: LoggingService
-  ) {
+  constructor() {
+    const platformId = inject(PLATFORM_ID);
+
     this.isBrowser = isPlatformBrowser(platformId);
   }
 

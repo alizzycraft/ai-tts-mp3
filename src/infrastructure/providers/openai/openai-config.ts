@@ -1,5 +1,5 @@
 // OpenAI TTS Provider Configuration
-import { Voice } from '../../../domain/tts.entity';
+import { Voice } from '../../../domain/entities/tts.entity';
 
 export interface OpenAITTSConfig {
   readonly baseUrl: string;

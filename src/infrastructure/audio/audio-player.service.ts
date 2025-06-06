@@ -1,6 +1,6 @@
-import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { TTSResult } from '../../domain/tts.entity';
+import { TTSResult } from '../../domain/entities/tts.entity';
 import { AudioStateManager } from './audio-state-manager.service';
 import { AudioResourceManager } from './audio-resource-manager.service';
 
@@ -8,13 +8,13 @@ import { AudioResourceManager } from './audio-resource-manager.service';
   providedIn: 'root'
 })
 export class AudioPlayerService {
+  private platformId = inject(PLATFORM_ID);
+  private stateManager = inject(AudioStateManager);
+  private resourceManager = inject(AudioResourceManager);
+
   private audio: HTMLAudioElement | undefined;
 
-  constructor(
-    @Inject(PLATFORM_ID) private platformId: object,
-    private stateManager: AudioStateManager,
-    private resourceManager: AudioResourceManager
-  ) {
+  constructor() {
     if (isPlatformBrowser(this.platformId)) {
       this.initializeAudioElement();
     }

@@ -5,14 +5,14 @@ import { HistoryPanelComponent } from '../history-panel/history-panel.component'
 import { SettingsPanelComponent } from '../settings-panel/settings-panel.component';
 import { EditorComponent } from '../editor/editor.component';
 import { AudioPlayerComponent } from '../audio-player/audio-player.component';
-import { TruncateTextPipe } from '../../common/truncate-text.pipe';
-import { FormatDatePipe } from '../../common/format-date.pipe';
-import { FormatFileSizePipe } from '../../common/format-file-size.pipe';
+import { TruncateTextPipe } from '../../common/transformers/truncate-text.pipe';
+import { FormatDatePipe } from '../../common/transformers/format-date.pipe';
+import { FormatFileSizePipe } from '../../common/transformers/format-file-size.pipe';
 import { HistoryItem } from '../../integration/history-storage.service';
 
 // Import focused services
 import { TTSGenerationManagerService, GenerationResult } from '../features/tts-generation/services/tts-generation-manager.service';
-import { HistoryInteractionManagerService } from '../features/history-management/services/history-interaction-manager.service';
+import { HistoryInteractionManagerService } from './services/history-interaction-manager.service';
 import { SettingsIntegrationManagerService } from '../features/settings-management/services/settings-integration-manager.service';
 
 @Component({
@@ -32,6 +32,8 @@ import { SettingsIntegrationManagerService } from '../features/settings-manageme
   styleUrl: './home.component.scss',
 })
 export class HomeComponent implements OnInit, AfterViewInit {
+  private elementRef = inject(ElementRef);
+
   @ViewChild(HistoryPanelComponent) private historyPanel?: HistoryPanelComponent;
 
   // Inject focused services
@@ -55,12 +57,8 @@ export class HomeComponent implements OnInit, AfterViewInit {
   isProcessing = computed(() => this.ttsGenerationManager.isProcessing());
   currentResult = computed(() => this.ttsGenerationManager.currentResult());
   errorMessage = computed(() => this.ttsGenerationManager.errorMessage());
-  storageWarning = computed(() => this.ttsGenerationManager.storageWarning()());
+  storageWarning = computed(() => this.ttsGenerationManager.storageWarning());
   currentQueryInfo = computed(() => this.historyInteractionManager.currentQueryInfo());
-
-  constructor(private elementRef: ElementRef) {
-    // Initialization logic that is safe for both browser and SSR
-  }
 
   ngOnInit() {
     // Code that should only run in the browser

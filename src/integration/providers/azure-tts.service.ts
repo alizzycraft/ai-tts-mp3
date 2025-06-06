@@ -1,7 +1,7 @@
-import { Injectable, signal, computed, Inject, PLATFORM_ID } from "@angular/core";
+import { Injectable, signal, computed, PLATFORM_ID, inject } from "@angular/core";
 import { LoggingService } from "../logging.service";
-import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus } from "../../domain/tts.entity";
-import { Result } from "../../common/result";
+import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus } from "../../domain/entities/tts.entity";
+import { Result } from "../../common/value-objects/query/result";
 import { ProviderHealthMetrics, ProviderMonitoringService } from "../monitoring/provider-monitoring.service";
 import { TTSProvider } from "./tts-provider.factory";
 import { isPlatformBrowser } from "@angular/common";
@@ -47,6 +47,10 @@ export interface AzureSSMLOptions {
   providedIn: "root"
 })
 export class AzureTTSService implements TTSProvider {
+  private logging = inject(LoggingService);
+  private providerMonitoring = inject(ProviderMonitoringService);
+  private platformId = inject(PLATFORM_ID);
+
   private readonly tokenUrl = "https://{{region}}.api.cognitive.microsoft.com/sts/v1.0/issueToken";
   private readonly ttsUrl = "https://{{region}}.tts.speech.microsoft.com/cognitiveservices/v1";
   private readonly voicesUrl = "https://{{region}}.tts.speech.microsoft.com/cognitiveservices/voices/list";
@@ -103,11 +107,7 @@ export class AzureTTSService implements TTSProvider {
     return { isValid, timeToExpiry };
   });
 
-  constructor(
-    private logging: LoggingService,
-    private providerMonitoring: ProviderMonitoringService,
-    @Inject(PLATFORM_ID) private platformId: object
-  ) {
+  constructor() {
     if (!this.initialized() && isPlatformBrowser(this.platformId)) {
       this.initialized.set(true);
       this.logging.info("AzureTTSService initialized", "Azure");
@@ -228,7 +228,11 @@ export class AzureTTSService implements TTSProvider {
             throw new Error(`Failed to fetch voices: ${response.status} ${response.statusText}`);
           }
 
-          const voices = await response.json();
+          const data = await response.json();
+          const voices = this.transformAzureVoices(data);
+          if (!voices) {
+            throw new Error('Invalid voice data received from Azure');
+          }
           this.cachedVoices.set(voices);
 
           this.logging.info(`Retrieved ${voices.length} Azure voices`, "Azure");
@@ -403,5 +407,43 @@ export class AzureTTSService implements TTSProvider {
     this.cachedVoices.set(null);
     this.cachedToken.set(null);
     this.logging.info("Azure cache cleared", "Azure");
+  }
+
+  private transformAzureVoices(azureVoices: unknown): AzureVoice[] | null {
+    if (!Array.isArray(azureVoices)) return null;
+
+    return azureVoices
+      .filter((voice): voice is Record<string, unknown> => (
+        typeof voice === 'object' && 
+        voice !== null
+      ))
+      .filter(voice => (
+        typeof voice['Name'] === 'string' &&
+        typeof voice['DisplayName'] === 'string' &&
+        typeof voice['LocalName'] === 'string' &&
+        typeof voice['ShortName'] === 'string' &&
+        typeof voice['Gender'] === 'string' &&
+        (voice['Gender'] === 'Male' || voice['Gender'] === 'Female') &&
+        typeof voice['Locale'] === 'string' &&
+        typeof voice['LocaleName'] === 'string' &&
+        typeof voice['SampleRateHertz'] === 'string' &&
+        typeof voice['Status'] === 'string'
+      ))
+      .map(voice => ({
+        name: voice['Name'] as string,
+        displayName: voice['DisplayName'] as string,
+        localName: voice['LocalName'] as string,
+        shortName: voice['ShortName'] as string,
+        gender: voice['Gender'] as 'Male' | 'Female',
+        locale: voice['Locale'] as string,
+        localeName: voice['LocaleName'] as string,
+        sampleRateHertz: voice['SampleRateHertz'] as string,
+        voiceType: ((voice['VoiceType'] as string)?.toLowerCase() === 'neural' ? 'Neural' : 'Standard'),
+        status: voice['Status'] as string,
+        wordCount: voice['WordsPerMinute'] as number | undefined,
+        characterCount: voice['CharactersPerMinute'] as number | undefined,
+        styleList: Array.isArray(voice['StyleList']) ? voice['StyleList'] as string[] : undefined,
+        secondaryLocales: Array.isArray(voice['SecondaryLocales']) ? voice['SecondaryLocales'] as string[] : undefined
+      }));
   }
 }

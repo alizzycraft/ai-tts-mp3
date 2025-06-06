@@ -1,10 +1,19 @@
 // Storage State Management Service - Manages storage state and configuration
-import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { FileSystemStorageState, FolderReconnectionPrompt } from '../domain-types';
 import { signal, computed } from '@angular/core';
 
-export type { FileSystemStorageState, FolderReconnectionPrompt };
+export interface FileSystemStorageState {
+  isSupported: boolean;
+  isEnabled: boolean;
+  selectedPath: string | null;
+  directoryHandle: FileSystemDirectoryHandle | null;
+}
+
+export interface FolderReconnectionPrompt {
+  previousPath: string;
+  shouldPrompt: boolean;
+}
 
 @Injectable({
   providedIn: 'root'
@@ -13,6 +22,7 @@ export class StorageStateService {
   private readonly FOLDER_STATE_KEY = 'tts-folder-state';
   private readonly STORAGE_STATE_KEY = 'tts-storage-state';
   private initialized = false;
+  private readonly platformId = inject(PLATFORM_ID);
 
   // Replace BehaviorSubjects with signals
   private readonly _fileSystemState = signal<FileSystemStorageState>({
@@ -31,14 +41,11 @@ export class StorageStateService {
   readonly folderReconnectionPrompt = computed(() => this._folderReconnectionPrompt());
   readonly stateError = computed(() => this._stateError());
   
-  constructor(
-    @Inject(PLATFORM_ID) private platformId: object
-  ) {}
-
   /** true only when running in a browser (not during SSR) */
   private get isBrowser(): boolean {
     return isPlatformBrowser(this.platformId);
   }
+
   // Initialize storage state with support detection
   initializeState(isSupported: boolean): void {
     if (this.initialized) {
@@ -63,7 +70,9 @@ export class StorageStateService {
         });
       }
     }
-  }  // Update file system state
+  }
+
+  // Update file system state
   updateFileSystemState(updates: Partial<FileSystemStorageState>): void {
     if (!this.isBrowser) return;
     
@@ -78,7 +87,9 @@ export class StorageStateService {
       }
       return newState;
     });
-  }  // Set the reconnection prompt - just stores state, no UI interaction
+  }
+
+  // Set the reconnection prompt - just stores state, no UI interaction
   setFolderReconnectionPrompt(prompt: FolderReconnectionPrompt | null): void {
     this._folderReconnectionPrompt.set(prompt);
 
@@ -92,9 +103,11 @@ export class StorageStateService {
       });
     }
   }
+
   clearFolderReconnectionPrompt(): void {
     this.setFolderReconnectionPrompt(null);
   }
+
   // Add method to force prompt check
   verifyPromptState(): void {
     // No action needed - this method can be empty after removing debug logs
@@ -103,7 +116,8 @@ export class StorageStateService {
   // Current state getters
   getState(): FileSystemStorageState {
     return this._fileSystemState();
-  }  // Convert to synchronous operation
+  }
+
   loadStorageState(): void {
     if (!this.isBrowser || typeof localStorage === 'undefined') return;
 
@@ -143,7 +157,6 @@ export class StorageStateService {
     }
   }
 
-  // Convert to synchronous operation
   saveStorageState(): void {
     if (!this.isBrowser || typeof localStorage === 'undefined') return;
 
@@ -162,7 +175,6 @@ export class StorageStateService {
     }
   }
 
-  // Convert to synchronous operation
   clearStorageState(): void {
     if (!this.isBrowser || typeof localStorage === 'undefined') return;
     try {

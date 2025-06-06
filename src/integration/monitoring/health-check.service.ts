@@ -1,9 +1,9 @@
 // Health checking service focused on application health monitoring
-import { Injectable, Inject, PLATFORM_ID, signal, computed } from '@angular/core';
+import { Injectable, PLATFORM_ID, signal, computed, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { LoggingService } from '../logging.service';
 import { ProviderConfigurationService } from '../settings/provider-configuration.service';
-import { ModelProvider } from '../../domain/tts.entity';
+import { ModelProvider } from '../../domain/entities/tts.entity';
 
 // Define a local interface for Performance that includes the non-standard memory property
 interface PerformanceWithMemory extends Performance {
@@ -42,6 +42,9 @@ export interface ProviderHealthStatus {
   providedIn: 'root'
 })
 export class HealthCheckService {
+  private logging = inject(LoggingService);
+  private providerConfig = inject(ProviderConfigurationService);
+
   // Static initialization guard
   private static isInitialized = false;
   
@@ -79,11 +82,9 @@ export class HealthCheckService {
   // Computed signal for provider health status
   readonly providerHealth = computed(() => Array.from(this.providerChecks().values()));
 
-  constructor(
-    @Inject(PLATFORM_ID) platformId: object,
-    private logging: LoggingService,
-    private providerConfig: ProviderConfigurationService
-  ) {
+  constructor() {
+    const platformId = inject(PLATFORM_ID);
+
     if (HealthCheckService.isInitialized) {
       this.logging.debug('HealthCheckService already initialized', 'HealthCheck');
       return;

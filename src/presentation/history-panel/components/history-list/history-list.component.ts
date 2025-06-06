@@ -3,10 +3,10 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HistoryItem } from '../../../../integration/domain-types';
 import { PlaybackService } from '../../../../integration/playback.service';
-import { FormatDatePipe } from '../../../../common/format-date.pipe';
-import { TruncateTextPipe } from '../../../../common/truncate-text.pipe';
-import { FormatFileSizePipe } from '../../../../common/format-file-size.pipe';
-import { FormatDurationPipe } from '../../../../common/format-duration.pipe';
+import { FormatDatePipe } from '../../../../common/transformers/format-date.pipe';
+import { TruncateTextPipe } from '../../../../common/transformers/truncate-text.pipe';
+import { FormatFileSizePipe } from '../../../../common/transformers/format-file-size.pipe';
+import { FormatDurationPipe } from '../../../../common/transformers/format-duration.pipe';
 
 @Component({
   selector: 'app-history-list',

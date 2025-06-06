@@ -1,4 +1,4 @@
-import { Component, Inject, PLATFORM_ID } from '@angular/core';
+import { Component, PLATFORM_ID, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { isPlatformBrowser } from '@angular/common';
 import { ModalOutletComponent } from '../shared/modal-outlet.component';
@@ -14,10 +14,10 @@ import { ModalOutletComponent } from '../shared/modal-outlet.component';
   styles: []
 })
 export class AppComponent {
+  private platformId = inject(PLATFORM_ID);
+
   title = 'AI-TTS-MP3';
-  constructor(
-    @Inject(PLATFORM_ID) private platformId: object
-  ) {
+  constructor() {
     if (isPlatformBrowser(this.platformId)) {
       document.title = 'AI-TTS-MP3';
     }

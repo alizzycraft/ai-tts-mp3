@@ -1,10 +1,10 @@
 // Provider configuration management service
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, inject } from '@angular/core';
 import { LoggingService } from '../logging.service';
-import { Result } from '../../common/result';
-import { ModelProvider, TTSSettings } from '../../domain/tts.entity';
+import { Result } from '../../common/value-objects/query/result';
+import { ModelProvider, TTSSettings } from '../../domain/entities/tts.entity';
 import { TTSProviderFactory } from '../providers/tts-provider.factory';
-import { ApiKey } from '../../domain/value-objects/api-key';
+import { ApiKey } from '../../common/value-objects/text/api-key';
 import { BrowserStorageService } from '../../infrastructure/storage/browser-storage.service';
 
 export interface ProviderConfiguration {
@@ -33,6 +33,10 @@ export interface ProviderValidationResult {
   providedIn: 'root'
 })
 export class ProviderConfigurationService {
+  private logging = inject(LoggingService);
+  private providerFactory = inject(TTSProviderFactory);
+  private browserStorage = inject(BrowserStorageService);
+
   private readonly STORAGE_KEY = 'tts_provider_configs';
 
   // Signals for reactive state
@@ -64,11 +68,7 @@ export class ProviderConfigurationService {
     }));
   });
 
-  constructor(
-    private logging: LoggingService,
-    private providerFactory: TTSProviderFactory,
-    private browserStorage: BrowserStorageService
-  ) {
+  constructor() {
     this.initializeConfigurations();
   }
 
@@ -81,11 +81,45 @@ export class ProviderConfigurationService {
       }
 
       const parsed = JSON.parse(stored);
+      if (!this.isValidConfigurationArray(parsed)) {
+        throw new Error('Invalid configuration format');
+      }
+      
       this.configurations.set(parsed);
     } catch (error) {
       this.logging.error('Failed to initialize configurations', error as Error, 'ProviderConfig');
       this.configurations.set(this.getDefaultConfigurations());
     }
+  }
+
+  private isValidConfigurationArray(value: unknown): value is ProviderConfiguration[] {
+    if (!Array.isArray(value)) return false;
+    
+    return value.every(item => this.isValidConfiguration(item));
+  }
+
+  private isValidConfiguration(config: unknown): config is ProviderConfiguration {
+    if (typeof config !== 'object' || config === null) return false;
+    
+    const c = config as Record<string, unknown>;
+    
+    return (
+      typeof c['provider'] === 'string' &&
+      Object.values(ModelProvider).includes(c['provider'] as ModelProvider) &&
+      typeof c['enabled'] === 'boolean' &&
+      typeof c['displayName'] === 'string' &&
+      typeof c['priority'] === 'number' &&
+      (c['apiKey'] === undefined || typeof c['apiKey'] === 'string') &&
+      (c['customEndpoint'] === undefined || typeof c['customEndpoint'] === 'string') &&
+      (c['timeout'] === undefined || typeof c['timeout'] === 'number') &&
+      (c['maxRetries'] === undefined || typeof c['maxRetries'] === 'number') &&
+      (!c['rateLimits'] || (
+        typeof c['rateLimits'] === 'object' &&
+        c['rateLimits'] !== null &&
+        typeof (c['rateLimits'] as Record<string, unknown>)['requestsPerMinute'] === 'number' &&
+        typeof (c['rateLimits'] as Record<string, unknown>)['charactersPerMinute'] === 'number'
+      ))
+    );
   }
 
   getAvailableProviders(): ModelProvider[] {
@@ -199,6 +233,21 @@ export class ProviderConfigurationService {
     this.lastValidationTime.set(new Date());
   }
 
+
+  async clearAllProviderConfigurations(): Promise<Result<void, string>> {
+    try {
+      this.browserStorage.removeItem(this.STORAGE_KEY);
+      this.configurations.set(this.getDefaultConfigurations());
+      this.apiKeyMap.set(new Map());
+      this.providerValidationResults.set(new Map());
+      this.lastValidationTime.set(new Date());
+      this.logging.info('Provider configurations cleared', 'ProviderConfig');
+      return Result.success(undefined);
+    } catch (error) {
+      this.logging.error('Failed to clear provider configurations', error as Error, 'ProviderConfig');
+      return Result.failure('Failed to clear configurations: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  }
 
   private getDefaultConfiguration(provider: ModelProvider): ProviderConfiguration {
     const displayNames: Record<ModelProvider, string> = {

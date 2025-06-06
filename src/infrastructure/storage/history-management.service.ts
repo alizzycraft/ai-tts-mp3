@@ -1,11 +1,11 @@
 // History management service - handles CRUD operations for history items
-import { Injectable, Inject, PLATFORM_ID, signal, computed } from '@angular/core';
+import { Injectable, PLATFORM_ID, signal, computed, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { HistoryItem } from './storage-types';
-import { TTSResult, TTSSettings } from '../../domain/tts.entity';
+import { HistoryItem } from '../../domain/types/storage-types';
+import { TTSResult, TTSSettings } from '../../domain/entities/tts.entity';
 import { DataSerializationService } from './data-serialization.service';
 import { StorageInfoService } from './storage-info.service';
-import { StorageStateService } from './storage-state.service';
+import { StorageStateService } from '../../domain/services/storage-state.service';
 import { FileSystemOperationsService } from './file-system-operations.service';
 import { StorageMigrationService } from './storage-migration.service';
 
@@ -13,6 +13,13 @@ import { StorageMigrationService } from './storage-migration.service';
   providedIn: 'root'
 })
 export class HistoryManagementService {
+  private platformId = inject(PLATFORM_ID);
+  private serialization = inject(DataSerializationService);
+  private storageInfo = inject(StorageInfoService);
+  private storageState = inject(StorageStateService);
+  private fileSystemOperations = inject(FileSystemOperationsService);
+  private migration = inject(StorageMigrationService);
+
   private readonly METADATA_FILE = 'history-metadata.json';
   
   // Replace BehaviorSubject with signal
@@ -20,15 +27,6 @@ export class HistoryManagementService {
   
   // Public readonly computed signal
   readonly history = computed(() => this._history());
-
-  constructor(
-    @Inject(PLATFORM_ID) private platformId: object,
-    private serialization: DataSerializationService,
-    private storageInfo: StorageInfoService,
-    private storageState: StorageStateService,
-    private fileSystemOperations: FileSystemOperationsService,
-    private migration: StorageMigrationService
-  ) {}
 
   /** true only when running in a browser (not during SSR) */
   private get isBrowser(): boolean {

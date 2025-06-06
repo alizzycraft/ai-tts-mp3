@@ -15,6 +15,3 @@ export interface PresentationStorageInfo extends Omit<StorageInfo, 'total'> {
 export interface PresentationStorageState extends FileSystemStorageState {
   showReconnectPrompt?: boolean;
 }
-
-// Using domain type directly
-export type { FolderReconnectionPrompt } from '../../../integration/domain-types';

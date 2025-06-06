@@ -6,17 +6,15 @@ import {
   QueryId, 
   QueryText, 
   TTSResultStatus
-} from '../domain/tts.entity';
-import { 
-  TTSQueryRepository, 
-  TTSResultRepository, 
-  TTSSettingsRepository, 
-  TTSDomainService 
-} from '../domain/tts.repository';
-import { ProviderError } from '../domain/provider.entity';
-import { Result } from '../common/result';
-import { Logger } from '../common/utils';
-import { TTSProviderService } from '../domain/tts-provider.interface';
+} from '../../domain/entities/tts.entity';
+import { TTSQueryRepository } from '../../domain/contracts/abstracts/repositories/tts-query.repository';
+import { TTSResultRepository } from '../../domain/contracts/abstracts/repositories/tts-result.repository';
+import { TTSSettingsRepository } from '../../domain/contracts/abstracts/repositories/tts-settings.repository';
+import { TTSDomainService } from '../../domain/services/tts-domain.service';
+import { ProviderError } from '../../domain/entities/provider.entity';
+import { Result } from '../../common/value-objects/query/result';
+import { Logger } from '../../common/utils/logger.util';
+import { TTSProviderService } from '../../domain/contracts/interfaces/tts-provider.interface';
 
 // Application Service for TTS operations
 export class TTSApplicationService {

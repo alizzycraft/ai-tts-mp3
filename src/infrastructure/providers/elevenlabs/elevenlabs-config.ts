@@ -1,5 +1,5 @@
 // ElevenLabs TTS provider configuration
-import { ModelProvider } from '../../../domain/tts.entity';
+import { ModelProvider } from '../../../domain/entities/tts.entity';
 
 export interface ElevenLabsConfig {
   baseUrl: string;

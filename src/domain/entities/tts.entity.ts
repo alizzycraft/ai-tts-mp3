@@ -1,9 +1,9 @@
 // Domain entities and types for TTS functionality
 
 // Import value objects
-export { QueryId } from './value-objects/query-id';
-export { QueryText } from './value-objects/query-text';
-export { ApiKey } from './value-objects/api-key';
+export { QueryId } from '../../common/value-objects/query/query-id';
+export { QueryText } from '../../common/value-objects/text/query-text';
+export { ApiKey } from '../../common/value-objects/text/api-key';
 
 // Enums for supported providers, models, and voices
 export enum ModelProvider {
@@ -39,9 +39,9 @@ export enum Voice {
 }
 
 // Import types for re-export
-import type { QueryId } from './value-objects/query-id';
-import type { QueryText } from './value-objects/query-text';
-import type { ApiKey } from './value-objects/api-key';
+import type { QueryId } from '../../common/value-objects/query/query-id';
+import type { QueryText } from '../../common/value-objects/text/query-text';
+import type { ApiKey } from '../../common/value-objects/text/api-key';
 
 // Domain Entities
 export interface TTSSettings {

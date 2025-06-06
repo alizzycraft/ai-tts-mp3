@@ -1,8 +1,8 @@
 // Infrastructure implementation of TTS Settings Repository (Local Storage)
 import { Injectable } from '@angular/core';
-import { TTSSettings } from '../../domain/tts.entity';
-import { TTSSettingsRepository } from '../../domain/tts.repository';
-import { Logger } from '../../common/utils';
+import { TTSSettings } from '../../domain/entities/tts.entity';
+import { TTSSettingsRepository } from '../../domain/contracts/abstracts/repositories/tts.repository';
+import { Logger } from '../../common/utils/logger.util';
 
 @Injectable({
   providedIn: 'root'

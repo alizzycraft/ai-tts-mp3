@@ -2,9 +2,9 @@
 import { Component, computed, OnDestroy, inject, input, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TTSResult } from '../../../../integration/domain-types';
-import { FormatDatePipe } from '../../../../common/format-date.pipe';
-import { FormatDurationPipe } from '../../../../common/format-duration.pipe';
-import { TruncateTextPipe } from '../../../../common/truncate-text.pipe';
+import { FormatDatePipe } from '../../../../common/transformers/format-date.pipe';
+import { FormatDurationPipe } from '../../../../common/transformers/format-duration.pipe';
+import { TruncateTextPipe } from '../../../../common/transformers/truncate-text.pipe';
 import { PlaybackService } from '../../../../integration/playback.service';
 import { AngularTTSService } from '../../../../integration/angular-tts.service';
 import { SettingsService } from '../../../../integration/settings.service';

@@ -1,5 +1,5 @@
 // Storage-related type definitions
-import { TTSResult, TTSSettings } from '../../domain/tts.entity';
+import { TTSResult, TTSSettings } from '../entities/tts.entity';
 
 export interface HistoryItem {
   id: string;

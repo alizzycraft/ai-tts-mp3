@@ -1,14 +1,16 @@
 // Storage Info Service - Calculates and manages storage usage statistics
-import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { signal, computed } from '@angular/core';
-import { HistoryItem, StorageInfo } from './storage-types';
-import { FileSystemStorageState } from './storage-state.service';
+import { HistoryItem, StorageInfo } from '../../domain/types/storage-types';
+import { FileSystemStorageState } from '../../domain/services/storage-state.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class StorageInfoService {
+  private platformId = inject(PLATFORM_ID);
+
   private readonly MAX_STORAGE_MB = 20; // Used for localStorage fallback
   private lastUpdateTime = 0;
   private readonly UPDATE_THRESHOLD_MS = 100; // Minimum time between updates
@@ -23,8 +25,6 @@ export class StorageInfoService {
 
   // Public readonly signal
   readonly storageInfo = computed(() => this._storageInfo());
-
-  constructor(@Inject(PLATFORM_ID) private platformId: object) {}
 
   /** true only when running in a browser (not during SSR) */
   private get isBrowser(): boolean {

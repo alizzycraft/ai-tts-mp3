@@ -1,7 +1,7 @@
-import { Injectable, OnDestroy, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, OnDestroy, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { TTSResult } from '../../domain/tts.entity';
-import { HistoryItem } from '../storage/storage-types';
+import { TTSResult } from '../../domain/entities/tts.entity';
+import { HistoryItem } from '../../domain/types/storage-types';
 import { AudioStateManager } from './audio-state-manager.service';
 import { Signal } from '@angular/core';
 
@@ -9,6 +9,9 @@ import { Signal } from '@angular/core';
   providedIn: 'root'
 })
 export class PlaybackService implements OnDestroy {
+  private platformId = inject(PLATFORM_ID);
+  private stateManager = inject(AudioStateManager);
+
   private audio: HTMLAudioElement | null = null;
   private currentAudioUrl: string | null = null;
   private currentAudioData: Uint8Array | null = null;
@@ -20,10 +23,7 @@ export class PlaybackService implements OnDestroy {
   readonly totalDuration: Signal<number>;
   readonly hasEnded: Signal<boolean>;
 
-  constructor(
-    @Inject(PLATFORM_ID) private platformId: object,
-    private stateManager: AudioStateManager
-  ) {
+  constructor() {
     // Initialize signals
     this.playingItemId = this.stateManager.playingItemId;
     this.isPlaying = this.stateManager.isPlaying;

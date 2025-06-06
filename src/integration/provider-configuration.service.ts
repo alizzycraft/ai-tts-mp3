@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { ApiKey } from '../domain/value-objects/api-key';
+import { ApiKey } from '../common/value-objects/text/api-key';
 
 @Injectable({
   providedIn: 'root'

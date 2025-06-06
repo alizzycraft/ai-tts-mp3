@@ -1,5 +1,5 @@
 // AWS Polly TTS provider configuration
-import { ModelProvider } from '../../../domain/tts.entity';
+import { ModelProvider } from '../../../domain/entities/tts.entity';
 
 export interface AWSConfig {
   baseUrl: string;

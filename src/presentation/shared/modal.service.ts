@@ -1,9 +1,12 @@
-import { Injectable, TemplateRef, signal, computed } from '@angular/core';
+import { Injectable, TemplateRef, signal, computed, Type } from '@angular/core';
+import { ReconnectionPromptModalComponent } from './reconnection-prompt-modal.component';
+
+export type ModalComponentType = Type<ReconnectionPromptModalComponent>;
 
 export interface ModalRequest<T = unknown> {
   type: 'template' | 'component';
   template?: TemplateRef<T>;
-  componentType?: string;
+  componentType?: ModalComponentType;
   data?: T;
   title?: string;
   allowDismiss?: boolean;
@@ -11,7 +14,7 @@ export interface ModalRequest<T = unknown> {
 
 export interface ModalState<T = unknown> {
   template: TemplateRef<T> | null;
-  componentType: string | null;
+  componentType: ModalComponentType | null;
   data: T | null;
   title: string | null;
   allowDismiss: boolean;
@@ -20,16 +23,18 @@ export interface ModalState<T = unknown> {
 }
 
 @Injectable({ providedIn: 'root' })
-export class ModalService {  // Modal state management using signals
+export class ModalService {
+  // Modal state management using signals
   private readonly state = signal<ModalState<unknown>>({
     template: null,
     componentType: null,
     data: null,
     title: null,
-    allowDismiss: true,
+    allowDismiss: true,  
     isOpen: false,
     requestId: null
   });
+
   // Expose read-only computed signals
   readonly template = computed(() => this.state().template);
   readonly componentType = computed(() => this.state().componentType);
@@ -39,16 +44,16 @@ export class ModalService {  // Modal state management using signals
   readonly isOpen = computed(() => this.state().isOpen);
   readonly requestId = computed(() => this.state().requestId);
 
-  // Signal for modal response
+  // Signal for modal response 
   readonly response = signal<{ requestId: string; value: unknown } | undefined>(undefined);
-  /**
-   * Shows a template-based modal
-   */  show<T>(config: ModalRequest<T>): string {
+
+  /** Shows a template-based modal */
+  show<T>(config: ModalRequest<T>): string {
     const requestId = this.generateRequestId();
     this.state.set({
       template: config.template || null,
       componentType: null,
-      data: config.data || null,
+      data: config.data || null, 
       title: config.title || null,
       allowDismiss: config.allowDismiss ?? true,
       isOpen: true,
@@ -57,10 +62,8 @@ export class ModalService {  // Modal state management using signals
     return requestId;
   }
 
-  /**
-   * Shows a component-based modal
-   */  showComponent<T>(request: ModalRequest<T>): string {
-    console.log('[ModalService] Showing component modal:', request);
+  /** Shows a component-based modal */
+  showComponent<T>(request: ModalRequest<T>): string {
     const requestId = this.generateRequestId();
     this.state.set({
       template: null,
@@ -71,13 +74,11 @@ export class ModalService {  // Modal state management using signals
       isOpen: true,
       requestId
     });
-    console.log('[ModalService] State after update:', this.state());
     return requestId;
   }
 
-  /**
-   * Closes the modal with an optional response
-   */  close<T>(value?: T): void {
+  /** Closes the modal with an optional response */
+  close<T>(value?: T): void {
     const currentState = this.state();
     
     // Update state
@@ -100,16 +101,12 @@ export class ModalService {  // Modal state management using signals
     }
   }
 
-  /**
-   * Clear the response signal (for consumers to reset after handling)
-   */
+  /** Clear the response signal (for consumers to reset after handling) */
   clearResponse(): void {
     this.response.set(undefined);
   }
 
-  /**
-   * Generate a unique request ID for tracking modal interactions
-   */
+  /** Generate a unique request ID for tracking modal interactions */
   private generateRequestId(): string {
     return `modal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }

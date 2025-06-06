@@ -1,15 +1,20 @@
 // Orchestrating monitoring service that coordinates health, metrics, and alerts
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, signal, inject } from '@angular/core';
 import { HealthCheckService, HealthStatus } from './health-check.service';
 import { MetricsCollectionService, ApplicationMetrics } from './metrics-collection.service';
 import { AlertService, Alert } from './alert.service';
 import { LoggingService } from '../logging.service';
-import { ModelProvider } from '../../domain/tts.entity';
+import { ModelProvider } from '../../domain/entities/tts.entity';
 
 @Injectable({
   providedIn: 'root'
 })
 export class MonitoringService {
+  private healthCheck = inject(HealthCheckService);
+  private metricsCollection = inject(MetricsCollectionService);
+  private alertService = inject(AlertService);
+  private logging = inject(LoggingService);
+
   // Reactive orchestration signals
   private monitoringEnabled = signal(true);
   private lastMonitoringRun = signal<Date | null>(null);
@@ -58,12 +63,7 @@ export class MonitoringService {
     };
   });
 
-  constructor(
-    private healthCheck: HealthCheckService,
-    private metricsCollection: MetricsCollectionService,
-    private alertService: AlertService,
-    private logging: LoggingService
-  ) {
+  constructor() {
     if (!this.initialized) {
       this.initialized = true;
       this.startMonitoring();

@@ -1,6 +1,6 @@
-import { Injectable, OnDestroy, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, OnDestroy, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { TTSResult } from '../domain/tts.entity';
+import { TTSResult } from '../domain/entities/tts.entity';
 import { HistoryItem } from './history-storage.service';
 import { PlaybackService as InfraPlaybackService } from '../infrastructure/audio/playback.service';
 
@@ -8,6 +8,9 @@ import { PlaybackService as InfraPlaybackService } from '../infrastructure/audio
   providedIn: 'root'
 })
 export class PlaybackService implements OnDestroy {
+  private playbackService = inject(InfraPlaybackService);
+  private platformId = inject(PLATFORM_ID);
+
   // Expose readonly signals
   readonly playingItemId;
   readonly isPlaying;
@@ -15,10 +18,7 @@ export class PlaybackService implements OnDestroy {
   readonly totalDuration;
   readonly hasEnded;
 
-  constructor(
-    private playbackService: InfraPlaybackService,
-    @Inject(PLATFORM_ID) private platformId: object
-  ) {
+  constructor() {
     this.playingItemId = this.playbackService.playingItemId;
     this.isPlaying = this.playbackService.isPlaying;
     this.currentTime = this.playbackService.currentTime;

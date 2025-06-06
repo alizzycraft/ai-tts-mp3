@@ -1,4 +1,4 @@
-import { Injectable, signal, computed, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, signal, computed, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { ModelProvider, Voice } from './domain-types';
 import { PROVIDER_FLAGS } from './provider-flags';
@@ -7,10 +7,8 @@ import { PROVIDER_FLAGS } from './provider-flags';
   providedIn: 'root'
 })
 export class SettingsService {
-  private isBrowser: boolean;
-  constructor(@Inject(PLATFORM_ID) private platformId: object) {
-    this.isBrowser = isPlatformBrowser(platformId);
-  }
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+
   // Settings state using signals
   selectedProvider = signal<ModelProvider>(ModelProvider.OPENAI);
   selectedModel = signal('tts-1');
@@ -90,13 +88,34 @@ export class SettingsService {
       saved = localStorage.getItem('tts_settings');
     }
     if (saved) {
-      const settings = JSON.parse(saved);
-      // Ensure saved provider is one of the available providers, fallback to default if not
-      const loadedProvider = this.providers.includes(settings.provider) ? settings.provider : ModelProvider.OPENAI;
+      const settings = JSON.parse(saved) as {
+        provider?: unknown;
+        model?: unknown;
+        voice?: unknown;
+        saveToHistory?: unknown;
+      };
+
+      // Validate and ensure type safety for each setting
+      const loadedProvider = this.isValidProvider(settings.provider) 
+        ? settings.provider 
+        : ModelProvider.OPENAI;
+      
+      const loadedModel = typeof settings.model === 'string' 
+        ? settings.model 
+        : 'tts-1';
+      
+      const loadedVoice = this.isValidVoice(settings.voice) 
+        ? settings.voice 
+        : Voice.ALLOY;
+      
+      const loadedSaveToHistory = typeof settings.saveToHistory === 'boolean' 
+        ? settings.saveToHistory 
+        : true;
+
+      // Update signals with validated values
       this.selectedProvider.set(loadedProvider);
-      this.selectedModel.set(settings.model || 'tts-1');
-      this.selectedVoice.set(settings.voice || Voice.ALLOY);
-      const loadedSaveToHistory = settings.saveToHistory ?? true;
+      this.selectedModel.set(loadedModel);
+      this.selectedVoice.set(loadedVoice);
       this.saveToHistory.set(loadedSaveToHistory);
     } else {
       // If no saved settings, set default provider here
@@ -105,6 +124,14 @@ export class SettingsService {
       this.selectedVoice.set(Voice.ALLOY);
       this.saveToHistory.set(true);
     }
+  }
+
+  private isValidProvider(value: unknown): value is ModelProvider {
+    return typeof value === 'string' && Object.values(ModelProvider).includes(value as ModelProvider);
+  }
+
+  private isValidVoice(value: unknown): value is Voice {
+    return typeof value === 'string' && Object.values(Voice).includes(value as Voice);
   }
 
   // Settings update methods

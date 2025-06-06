@@ -1,9 +1,9 @@
 // TTS Settings management service
 import { Injectable } from '@angular/core';
-import { TTSSettings, ModelProvider } from '../../domain/tts.entity';
-import { ApiKey } from '../../domain/value-objects/api-key';
-import { Result } from '../../common/result';
-import { Logger } from '../../common/utils';
+import { TTSSettings, ModelProvider } from '../../domain/entities/tts.entity';
+import { ApiKey } from '../../common/value-objects/text/api-key';
+import { Result } from '../../common/value-objects/query/result';
+import { Logger } from '../../common/utils/logger.util';
 
 @Injectable({
   providedIn: 'root'
@@ -41,25 +41,46 @@ export class TTSSettingsService {
     }
   }
 
+  private isValidTTSSettings(value: unknown): value is TTSSettings {
+    if (!value || typeof value !== 'object') return false;
+    const settings = value as Record<string, unknown>;
+    
+    // Required fields
+    if (typeof settings['provider'] !== 'string' ||
+        !Object.values(ModelProvider).includes(settings['provider'] as ModelProvider)) {
+      return false;
+    }
+    
+    // Optional fields with type validation
+    if ('model' in settings && typeof settings['model'] !== 'string') return false;
+    if ('voice' in settings && typeof settings['voice'] !== 'string') return false;
+    if ('apiKey' in settings && settings['apiKey'] !== undefined && !(settings['apiKey'] instanceof ApiKey)) return false;
+    
+    return true;
+  }
+
   /**
    * Load the last used TTS settings
    */
   async loadLastUsedSettings(): Promise<Result<TTSSettings | null, string>> {
     try {
-      Logger.debug('Loading last used TTS settings');
+      Logger.info('Loading last used TTS settings');
 
       const stored = localStorage.getItem(this.STORAGE_KEY);
       if (!stored) {
-        Logger.debug('No last used settings found');
+        Logger.info('No last used settings found');
+        return Result.success(null);
+      }      const parsed = JSON.parse(stored);
+      if (!this.isValidTTSSettings(parsed)) {
+        Logger.warn('Invalid stored TTS settings format', { parsed });
         return Result.success(null);
       }
 
-      const parsed = JSON.parse(stored);
-      
-      // Convert string apiKey back to ApiKey value object
+      // Convert string apiKey back to ApiKey value object if present
+      const apiKeyStr = (parsed as Record<string, unknown>)['apiKey'];
       const settings: TTSSettings = {
         ...parsed,
-        apiKey: parsed.apiKey ? ApiKey.fromString(parsed.apiKey) : undefined
+        apiKey: typeof apiKeyStr === 'string' ? new ApiKey(apiKeyStr) : undefined
       };
 
       Logger.info('Last used TTS settings loaded successfully');
@@ -86,18 +107,12 @@ export class TTSSettingsService {
 
   /**
    * Get default TTS settings for a provider
-   */
-  getDefaultSettings(provider: ModelProvider): TTSSettings {
-    const baseSettings: TTSSettings = {
+   */  getDefaultSettings(provider: ModelProvider): TTSSettings {
+    return {
       provider,
-      text: '',
       voice: this.getDefaultVoice(provider),
-      model: this.getDefaultModel(provider),
-      responseFormat: 'mp3',
-      speed: 1.0
+      model: this.getDefaultModel(provider)
     };
-
-    return baseSettings;
   }
 
   /**
@@ -142,16 +157,11 @@ export class TTSSettingsService {
 
   /**
    * Validate TTS settings
-   */
-  validateSettings(settings: TTSSettings): Result<void, string[]> {
+   */  validateSettings(settings: TTSSettings): Result<void, string[]> {
     const errors: string[] = [];
 
-    if (!settings.text?.trim()) {
-      errors.push('Text is required');
-    }
-
-    if (settings.text && settings.text.length > 4000) {
-      errors.push('Text cannot exceed 4000 characters');
+    if (!settings.provider) {
+      errors.push('Provider is required');
     }
 
     if (!settings.voice?.trim()) {
@@ -160,12 +170,6 @@ export class TTSSettingsService {
 
     if (!settings.model?.trim()) {
       errors.push('Model is required');
-    }
-
-    if (settings.speed !== undefined) {
-      if (settings.speed < 0.25 || settings.speed > 4.0) {
-        errors.push('Speed must be between 0.25 and 4.0');
-      }
     }
 
     if (errors.length > 0) {

@@ -1,9 +1,9 @@
 // ElevenLabs TTS provider implementation
-import { Injectable, signal, computed, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, signal, computed, PLATFORM_ID, inject } from '@angular/core';
 import { LoggingService } from '../logging.service';
 import { ProviderMonitoringService } from '../monitoring/provider-monitoring.service';
-import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus } from '../../domain/tts.entity';
-import { Result } from '../../common/result';
+import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus } from '../../domain/entities/tts.entity';
+import { Result } from '../../common/value-objects/query/result';
 import { ProviderHealthMetrics } from '../monitoring/provider-monitoring.service';
 import { isPlatformBrowser } from '@angular/common';
 
@@ -59,6 +59,10 @@ export interface ElevenLabsSettings extends TTSSettings {
   providedIn: 'root'
 })
 export class ElevenLabsTTSService {
+  private logging = inject(LoggingService);
+  private providerMonitoring = inject(ProviderMonitoringService);
+  private platformId = inject(PLATFORM_ID);
+
   private readonly baseUrl = 'https://api.elevenlabs.io/v1';
   private readonly cacheExpiryTime = 5 * 60 * 1000; // 5 minutes
 
@@ -121,11 +125,7 @@ export class ElevenLabsTTSService {
       }
     }
     return status;
-  });  constructor(
-    private logging: LoggingService,
-    private providerMonitoring: ProviderMonitoringService,
-    @Inject(PLATFORM_ID) private platformId: object
-  ) {
+  });  constructor() {
     if (!this.initialized() && isPlatformBrowser(this.platformId)) {
       this.initialized.set(true);
       this.logging.info('ElevenLabsTTSService initialized', 'ElevenLabs');
@@ -143,6 +143,10 @@ export class ElevenLabsTTSService {
       return Result.failure('ElevenLabs API key is required');
     }
 
+    if (!text?.trim()) {
+      return Result.failure('Text is required');
+    }
+
     return this.logging.trackPerformance(
       'elevenLabsSynthesize',
       async () => {
@@ -154,10 +158,19 @@ export class ElevenLabsTTSService {
           model: settings.model
         });
 
-        try {          const audioData = await this.makeTextToSpeechRequest(text, settings);
-          const processingTime = Date.now() - startTime;          
+        try {
+          // Validate text length against model limits
+          const model = this.cachedModels().find(m => m.model_id === settings.model);
+          const maxLength = model?.maximum_text_length_request || 2500;
+          if (text.length > maxLength) {
+            throw new Error(`Text length (${text.length}) exceeds maximum allowed characters (${maxLength})`);
+          }
+
+          const audioData = await this.makeTextToSpeechRequest(text, settings);
+          const processingTime = Date.now() - startTime;
+          
           this.synthesisCount.update(count => count + 1);
-          this.updateProviderHealth(); // Update health metrics after successful synthesis
+          this.updateProviderHealth();
 
           const result: TTSResult = {
             queryId,
@@ -178,16 +191,32 @@ export class ElevenLabsTTSService {
 
           return Result.success(result);
 
-        } catch (error) {          const processingTime = Date.now() - startTime;          
+        } catch (error) {
+          const processingTime = Date.now() - startTime;
           this.errorCount.update(count => count + 1);
-          this.updateProviderHealth(); // Update health metrics after failed synthesis
+          this.updateProviderHealth();
 
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-          this.logging.error('ElevenLabs synthesis failed', error as Error, 'ElevenLabs', {
-            processingTime,
-            errorMessage,
-            successRate: this.successRate()
-          });
+          // Convert any error to a string message
+          let errorMessage: string;
+          if (error instanceof Error) {
+            errorMessage = error.message;
+          } else if (typeof error === 'string') {
+            errorMessage = error;
+          } else if (error && typeof error === 'object' && 'message' in error) {
+            errorMessage = String(error.message);
+          } else {
+            errorMessage = 'Unknown error occurred';
+          }
+
+          this.logging.error('ElevenLabs synthesis failed', 
+            error instanceof Error ? error : new Error(errorMessage), 
+            'ElevenLabs', 
+            {
+              processingTime,
+              errorMessage,
+              successRate: this.successRate()
+            }
+          );
 
           const result: TTSResult = {
             queryId,
@@ -231,11 +260,12 @@ export class ElevenLabsTTSService {
           }
 
           const data = await response.json();
-          this.cachedVoices.set(data.voices || []);
+          const voices = this.transformElevenLabsVoices(data.voices);
+          this.cachedVoices.set(voices);
           this.voicesCacheExpiry.set(new Date(Date.now() + this.cacheExpiryTime));
 
-          this.logging.info(`Retrieved ${this.cachedVoices().length} ElevenLabs voices`, 'ElevenLabs');
-          return Result.success(this.cachedVoices());
+          this.logging.info(`Retrieved ${voices.length} ElevenLabs voices`, 'ElevenLabs');
+          return Result.success(voices);
 
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to fetch voices';
@@ -269,11 +299,12 @@ export class ElevenLabsTTSService {
           }
 
           const data = await response.json();
-          this.cachedModels.set(data || []);
+          const models = this.transformElevenLabsModels(data);
+          this.cachedModels.set(models);
           this.modelsCacheExpiry.set(new Date(Date.now() + this.cacheExpiryTime));
 
-          this.logging.info(`Retrieved ${this.cachedModels().length} ElevenLabs models`, 'ElevenLabs');
-          return Result.success(this.cachedModels());
+          this.logging.info(`Retrieved ${models.length} ElevenLabs models`, 'ElevenLabs');
+          return Result.success(models);
 
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to fetch models';
@@ -347,32 +378,92 @@ export class ElevenLabsTTSService {
   }
 
   private async makeTextToSpeechRequest(text: string, settings: TTSSettings): Promise<Uint8Array> {
+    if (!settings.apiKey?.getValue()) {
+      throw new Error('ElevenLabs API key is required');
+    }
+
+    if (!settings.voice) {
+      throw new Error('Voice ID is required');
+    }
+
+    // Type guard for ElevenLabs specific settings
+    const elevenLabsSettings = settings as ElevenLabsSettings;
+    
+    // Validate and normalize settings with safe defaults
     const payload = {
-      text,
-      model_id: settings.model || 'eleven_monolingual_v1',      voice_settings: {
-        stability: (settings as ElevenLabsSettings).stability || 0.5,
-        similarity_boost: (settings as ElevenLabsSettings).similarityBoost || 0.75,
-        style: (settings as ElevenLabsSettings).style || 0,
-        use_speaker_boost: (settings as ElevenLabsSettings).useSpeakerBoost || true
+      text: String(text).trim(),
+      model_id: String(settings.model || 'eleven_monolingual_v1'),
+      voice_settings: {
+        stability: typeof elevenLabsSettings.stability === 'number' && 
+          elevenLabsSettings.stability >= 0 && 
+          elevenLabsSettings.stability <= 1
+          ? elevenLabsSettings.stability 
+          : 0.5,
+
+        similarity_boost: typeof elevenLabsSettings.similarityBoost === 'number' && 
+          elevenLabsSettings.similarityBoost >= 0 && 
+          elevenLabsSettings.similarityBoost <= 1
+          ? elevenLabsSettings.similarityBoost
+          : 0.75,
+
+        style: typeof elevenLabsSettings.style === 'number' && 
+          elevenLabsSettings.style >= 0 && 
+          elevenLabsSettings.style <= 1
+          ? elevenLabsSettings.style 
+          : 0,
+
+        use_speaker_boost: Boolean(elevenLabsSettings.useSpeakerBoost)
       }
     };
 
-    const response = await fetch(`${this.baseUrl}/text-to-speech/${settings.voice}`, {
-      method: 'POST',
-      headers: {
-        'xi-api-key': settings.apiKey!.getValue(),
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
+    this.logging.info('Making ElevenLabs TTS request', 'ElevenLabs', {
+      textLength: payload.text.length,
+      modelId: payload.model_id,
+      voiceId: settings.voice
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`ElevenLabs API error: ${response.status} ${response.statusText} - ${errorText}`);
-    }
+    try {
+      const response = await fetch(`${this.baseUrl}/text-to-speech/${settings.voice}`, {
+        method: 'POST',
+        headers: {
+          'xi-api-key': settings.apiKey.getValue(),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
 
-    const arrayBuffer = await response.arrayBuffer();
-    return new Uint8Array(arrayBuffer);
+      if (!response.ok) {
+        let errorMessage = `ElevenLabs API error: ${response.status} ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          if (typeof errorData?.detail?.message === 'string') {
+            errorMessage += ` - ${errorData.detail.message}`;
+          }
+        } catch {
+          // If error response isn't JSON, try text
+          const errorText = await response.text();
+          if (errorText) {
+            errorMessage += ` - ${errorText}`;
+          }
+        }
+        throw new Error(errorMessage);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      if (!arrayBuffer) {
+        throw new Error('Received empty response from ElevenLabs API');
+      }
+
+      return new Uint8Array(arrayBuffer);
+
+    } catch (error) {
+      this.logging.error(
+        'ElevenLabs API request failed',
+        error instanceof Error ? error : new Error('Unknown error'),
+        'ElevenLabs'
+      );
+      throw error;
+    }
   }
 
   private estimateAudioDuration(audioData: Uint8Array): number {
@@ -395,5 +486,169 @@ export class ElevenLabsTTSService {
     };
 
     this.providerMonitoring.updateProviderMetrics(ModelProvider.ELEVENLABS, metrics);
+  }
+
+  private transformElevenLabsVoices(elevenVoices: unknown): ElevenLabsVoice[] {
+    // Initial type guard for array
+    if (!Array.isArray(elevenVoices)) {
+      this.logging.warn('Expected array for ElevenLabs voices, received different type', 'ElevenLabs');
+      return [];
+    }
+
+    return elevenVoices
+      .filter((voice): voice is Record<string, unknown> => {
+        // Type guard for object
+        if (typeof voice !== 'object' || voice === null) {
+          return false;
+        }
+
+        // Required field presence checks
+        const requiredFields = [
+          'voice_id',
+          'name',
+          'category',
+          'fine_tuning',
+          'labels',
+          'description',
+          'preview_url',
+          'available_for_tiers',
+          'settings'
+        ];
+
+        const hasAllFields = requiredFields.every(field => field in voice);
+        if (!hasAllFields) {
+          this.logging.warn(`Voice object missing required fields: ${requiredFields.filter(f => !(f in voice)).join(', ')}`, 'ElevenLabs');
+          return false;
+        }
+
+        // Type verification for nested objects
+        const settings = voice['settings'];
+        if (typeof settings !== 'object' || settings === null) {
+          this.logging.warn('Voice settings is not an object', 'ElevenLabs');
+          return false;
+        }
+
+        const fineTuning = voice['fine_tuning'];
+        if (typeof fineTuning !== 'object' || fineTuning === null) {
+          this.logging.warn('Voice fine_tuning is not an object', 'ElevenLabs');
+          return false;
+        }
+
+        return true;
+      })
+      .map(voice => {
+        // Safe type casting with fallbacks
+        const settings = voice['settings'] as Record<string, unknown>;
+        return {
+          voice_id: String(voice['voice_id']),
+          name: String(voice['name']),
+          category: String(voice['category']),
+          fine_tuning: {
+            is_allowed: Boolean((voice['fine_tuning'] as Record<string, unknown>)['is_allowed'])
+          },
+          labels: voice['labels'] as Record<string, string>,
+          description: String(voice['description']),
+          preview_url: String(voice['preview_url']),
+          available_for_tiers: Array.isArray(voice['available_for_tiers']) 
+            ? voice['available_for_tiers'].map(String)
+            : [],
+          settings: {
+            stability: typeof settings['stability'] === 'number' ? settings['stability'] : 0.5,
+            similarity_boost: typeof settings['similarity_boost'] === 'number' ? settings['similarity_boost'] : 0.75,
+            style: typeof settings['style'] === 'number' ? settings['style'] : 0,
+            use_speaker_boost: Boolean(settings['use_speaker_boost'])
+          }
+        };
+      });
+  }
+
+  private transformElevenLabsModels(elevenModels: unknown): ElevenLabsModel[] {
+    // Initial type guard for array
+    if (!Array.isArray(elevenModels)) {
+      this.logging.warn('Expected array for ElevenLabs models, received different type', 'ElevenLabs');
+      return [];
+    }
+
+    return elevenModels
+      .filter((model): model is Record<string, unknown> => {
+        // Type guard for object
+        if (typeof model !== 'object' || model === null) {
+          return false;
+        }
+
+        // Required field presence and type checks
+        const requiredFields: [string, string][] = [
+          ['model_id', 'string'],
+          ['name', 'string'],
+          ['can_be_finetuned', 'boolean'],
+          ['can_do_text_to_speech', 'boolean'],
+          ['can_do_voice_conversion', 'boolean'],
+          ['can_use_style', 'boolean'],
+          ['can_use_speaker_boost', 'boolean'],
+          ['serves_pro_voices', 'boolean'],
+          ['token_cost_factor', 'number'],
+          ['description', 'string'],
+          ['requires_alpha_access', 'boolean']
+        ];
+
+        const hasValidFields = requiredFields.every(([field, type]) => {
+          const value = model[field];
+          return value !== undefined && typeof value === type;
+        });
+
+        if (!hasValidFields) {
+          const invalidFields = requiredFields
+            .filter(([field, type]) => {
+              const value = model[field];
+              return value === undefined || typeof value !== type;
+            })
+            .map(([field]) => field);
+          this.logging.warn(`Model object has invalid fields: ${invalidFields.join(', ')}`, 'ElevenLabs');
+          return false;
+        }
+
+        // Check languages array
+        if (!Array.isArray(model['languages'])) {
+          this.logging.warn('Model languages is not an array', 'ElevenLabs');
+          return false;
+        }
+
+        return true;
+      })
+      .map(model => ({
+        model_id: String(model['model_id']),
+        name: String(model['name']),
+        can_be_finetuned: Boolean(model['can_be_finetuned']),
+        can_do_text_to_speech: Boolean(model['can_do_text_to_speech']),
+        can_do_voice_conversion: Boolean(model['can_do_voice_conversion']),
+        can_use_style: Boolean(model['can_use_style']),
+        can_use_speaker_boost: Boolean(model['can_use_speaker_boost']),
+        serves_pro_voices: Boolean(model['serves_pro_voices']),
+        token_cost_factor: Number(model['token_cost_factor']),
+        description: String(model['description']),
+        requires_alpha_access: Boolean(model['requires_alpha_access']),
+        max_characters_request_free_user: typeof model['max_characters_request_free_user'] === 'number'
+          ? model['max_characters_request_free_user'] as number
+          : 2500,
+        max_characters_request_subscribed_user: typeof model['max_characters_request_subscribed_user'] === 'number'
+          ? model['max_characters_request_subscribed_user'] as number
+          : 5000,
+        maximum_text_length_request: typeof model['maximum_text_length_request'] === 'number'
+          ? model['maximum_text_length_request'] as number
+          : 2500,
+        languages: Array.isArray(model['languages'])
+          ? model['languages']
+              .filter((lang): lang is Record<string, unknown> =>
+                typeof lang === 'object' &&
+                lang !== null &&
+                typeof lang['language_id'] === 'string' &&
+                typeof lang['name'] === 'string'
+              )
+              .map(lang => ({
+                language_id: String(lang['language_id']),
+                name: String(lang['name'])
+              }))
+          : []
+      }));
   }
 }

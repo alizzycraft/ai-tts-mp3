@@ -1,5 +1,5 @@
 // Domain value object for TTS Query ID
-import { StringIdentifier } from '../../common/value-objects/identifier';
+import { StringIdentifier } from '../identifiers/identifier';
 
 export class QueryId extends StringIdentifier {
   private constructor(value: string) {

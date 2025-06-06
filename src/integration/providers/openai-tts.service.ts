@@ -1,9 +1,9 @@
 // OpenAI TTS provider implementation
-import { Injectable, signal, computed, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, signal, computed, PLATFORM_ID, inject } from '@angular/core';
 import { LoggingService } from '../logging.service';
 import { ProviderMonitoringService } from '../monitoring/provider-monitoring.service';
-import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus, QueryText } from '../../domain/tts.entity';
-import { Result } from '../../common/result';
+import { TTSSettings, TTSResult, QueryId, ModelProvider, TTSResultStatus, QueryText } from '../../domain/entities/tts.entity';
+import { Result } from '../../common/value-objects/query/result';
 import { OpenAITTSService } from '../../infrastructure/providers/openai/openai-tts.service';
 import { TTSProvider } from './tts-provider.factory';
 import { isPlatformBrowser } from '@angular/common';
@@ -37,6 +37,10 @@ export interface OpenAICapabilities {
   providedIn: 'root'
 })
 export class OpenAITTSProviderService implements TTSProvider {
+  private logging = inject(LoggingService);
+  private providerMonitoring = inject(ProviderMonitoringService);
+  private platformId = inject(PLATFORM_ID);
+
   // Reactive signals for provider state
   private cache = signal(new Map<string, { result: TTSResult; timestamp: number }>());
   private cacheDuration = signal(5 * 60 * 1000); // 5 minutes
@@ -97,10 +101,7 @@ export class OpenAITTSProviderService implements TTSProvider {
   private readonly capabilities: OpenAICapabilities;
   private readonly openaiService: OpenAITTSService;
 
-  constructor(
-    private logging: LoggingService,    private providerMonitoring: ProviderMonitoringService,
-    @Inject(PLATFORM_ID) private platformId: object
-  ) {
+  constructor() {
     this.openaiService = new OpenAITTSService();
     this.capabilities = {
       name: 'OpenAI Text-to-Speech',
