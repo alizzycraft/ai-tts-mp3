@@ -1,0 +1,1 @@
+// This service manages the storage and retrieval of TTS history, coordinating between application state and storage mechanisms. It ensures history items are persisted, loaded, and managed according to business rules.

@@ -1,0 +1,1 @@
+// This service provides methods for interacting with the browser's file system API, including selecting directories, reading, writing, and deleting files, and managing file system permissions for TTS data.

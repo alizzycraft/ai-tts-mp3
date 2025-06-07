@@ -364,6 +364,72 @@ src/integration/services/tts/tts-integration.service.ts
 - [ ] `ng test` runs with proper layer isolation
 - [ ] All layer dependencies respect onion architecture rules
 
+## 📦 Example package.json
+
+Below is an example `package.json` for the AI-TTS-MP3 project, illustrating required dependencies, scripts, and conventions for Angular, SSR, linting, and build workflows:
+
+```json
+{
+  "name": "ai-tts-mp3",
+  "version": "1.0.0",
+  "scripts": {
+    "ng": "ng",
+    "start": "ng serve",
+    "build": "npm run lint && ng build",
+    "build:static": "npm run lint && ng build --configuration production",
+    "build:github-pages": "npm run lint && ng build --configuration production --base-href /ai-tts-mp3/",
+    "build:spa": "npm run lint && ng build --configuration spa",
+    "build:ssr": "npm run lint && ng build --configuration production",
+    "watch": "ng build --watch --configuration development",
+    "test": "ng test",
+    "lint": "ng lint",
+    "lint:fix": "ng lint --fix",
+    "serve:ssr:ai-tts-mp3": "node dist/ai-tts-mp3/server/server.mjs"
+  },
+  "private": true,
+  "dependencies": {
+    "@angular/animations": "^20.0.0",
+    "@angular/cdk": "^20.0.1",
+    "@angular/common": "^20.0.0",
+    "@angular/compiler": "^20.0.0",
+    "@angular/core": "^20.0.0",
+    "@angular/forms": "^20.0.0",
+    "@angular/platform-browser": "^20.0.0",
+    "@angular/platform-browser-dynamic": "^20.0.0",
+    "@angular/platform-server": "^20.0.0",
+    "@angular/router": "^20.0.0",
+    "@angular/ssr": "^20.0.0",
+    "express": "^5.1.0",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@angular-devkit/build-angular": "^20.0.0",
+    "@angular/cli": "^20.0.0",
+    "@angular/compiler-cli": "^20.0.0",
+    "@tabler/icons": "^3.33.0",
+    "@types/express": "^5.0.1",
+    "@types/jasmine": "~5.1.0",
+    "@types/node": "^18.19.110",
+    "angular-eslint": "^20.0.0-beta.1",
+    "eslint": "^9.0.0",
+    "eslint-import-resolver-typescript": "^4.4.1",
+    "eslint-plugin-import": "^2.31.0",
+    "globals": "^16.2.0",
+    "jasmine-core": "~5.1.0",
+    "karma": "~6.4.0",
+    "karma-chrome-launcher": "~3.2.0",
+    "karma-coverage": "~2.2.0",
+    "karma-jasmine": "~5.1.0",
+    "karma-jasmine-html-reporter": "~2.1.0",
+    "typescript": "~5.8.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}
+```
+
+> **Note:** This example reflects the required structure for Angular 20+, SSR, linting, and build scripts. Adjust versions and scripts as needed for your project evolution.
+
 ## 🔄 Cross-References
 
 - **Core Requirements**: See [PRD-Core.md](./PRD-Core.md) for project overview and development workflow

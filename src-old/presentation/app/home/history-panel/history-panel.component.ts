@@ -1,0 +1,1 @@
+// This component manages the display and user interaction for the history panel, including item selection, playback, download, folder management, and confirmation dialogs. It coordinates UI state and delegates actions to the appropriate services, ensuring the user can view and manage their TTS history.

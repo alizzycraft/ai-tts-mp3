@@ -1,0 +1,1 @@
+// Settings Repository for local storage (optional persistence)

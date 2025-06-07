@@ -1,0 +1,1 @@
+// This service coordinates file system storage operations, managing the connection to the user's file system, folder selection, and storage state for TTS data.

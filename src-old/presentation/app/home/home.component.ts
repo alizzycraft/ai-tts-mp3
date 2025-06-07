@@ -1,0 +1,1 @@
+// This component serves as the main entry point for the home view, orchestrating the display and interaction of TTS features, history, and audio playback. It coordinates state and delegates user actions to the appropriate managers and services.

@@ -1,0 +1,1 @@
+// This interface defines the contract for history storage services, specifying required methods for persisting, retrieving, and managing TTS history items.

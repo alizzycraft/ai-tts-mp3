@@ -1,0 +1,1 @@
+// This service provides integration with Azure's TTS API, managing requests, responses, and configuration validation for Azure-based speech synthesis.

@@ -1,0 +1,1 @@
+// This service acts as an Angular-specific bridge for TTS operations, exposing TTS functionality to Angular components and handling framework-specific concerns.
