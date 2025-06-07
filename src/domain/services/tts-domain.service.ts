@@ -22,7 +22,7 @@ export class TTSDomainService {
     }    // Provider-specific validations can be added here when needed
   }
 
-  async estimateCost(query: TTSQuery): Promise<number> {
+  async estimateCost(query: TTSQuery): /*todo:convert*/ Promise<number> {
     const wordCount = query.text.getWordCount();
     
     // Rough cost estimation based on provider
@@ -36,7 +36,7 @@ export class TTSDomainService {
     }
   }
 
-  async canProcessQuery(query: TTSQuery): Promise<boolean> {
+  async canProcessQuery(query: TTSQuery): /*todo:convert*/ Promise<boolean> {
     // Check if query text is within limits
     const textLength = query.text.getValue().length;
     

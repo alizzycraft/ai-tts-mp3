@@ -111,11 +111,11 @@ export class MonitoringService {
   }
 
   // Health monitoring - enhanced with signals
-  async getHealthStatus(): Promise<HealthStatus> {
+  async getHealthStatus(): /*todo:convert*/ Promise<HealthStatus> {
     return this.healthCheck.getHealthStatus();
   }
 
-  async runHealthChecks(): Promise<void> {
+  async runHealthChecks(): /*todo:convert*/ Promise<void> {
     return this.healthCheck.runSystemHealthChecks(); // Only run system health checks, not provider checks
   }
 
@@ -168,7 +168,7 @@ export class MonitoringService {
   }
 
   // Combined monitoring operations
-  async runMonitoringCycle(): Promise<void> {
+  async runMonitoringCycle(): /*todo:convert*/ Promise<void> {
     try {
       this.lastMonitoringRun.set(new Date());
       
@@ -207,7 +207,7 @@ export class MonitoringService {
   }
 
   getMonitoringSummary(): {
-    health: Promise<HealthStatus>;
+    health: /*todo:convert*/ Promise<HealthStatus>;
     metrics: ApplicationMetrics;
     activeAlerts: Alert[];
     summary: {

@@ -4,7 +4,6 @@ import { provideClientHydration } from '@angular/platform-browser';
 import { provideHttpClient, withFetch } from '@angular/common/http';
 
 import { routes } from '../routes/app.routes';
-import { modalServiceProvider } from '../../providers/modal.provider';
 import { modalOutletProvider } from '../../providers/modal-outlet.provider';
 import { reconnectionPromptModalProvider } from '../../providers/reconnection-prompt-modal.provider';
 import { historyStorageProvider } from '../../providers/history-storage.provider';
@@ -12,6 +11,8 @@ import { ttsProviderFactoryProvider } from '../../providers/tts-provider-factory
 import { historyManagementProvider } from '../../providers/history-management.provider';
 import { fileSystemStorageManagerProvider } from '../../providers/file-system-storage-manager.provider';
 import { storageInfoProvider } from '../../providers/storage-info.provider';
+import { MODAL_SERVICE } from '../../../domain/contracts/tokens/modal-service.token';
+import { ModalService } from '../../services/ui/modal.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -23,9 +24,6 @@ export const appConfig: ApplicationConfig = {
     historyStorageProvider,
     historyManagementProvider,
     
-    // Modal Service provider
-    modalServiceProvider,
-    
     // Modal Outlet provider
     modalOutletProvider,
     
@@ -35,6 +33,9 @@ export const appConfig: ApplicationConfig = {
     // TTS Provider Factory
     ttsProviderFactoryProvider,
     fileSystemStorageManagerProvider,
-    storageInfoProvider
+    storageInfoProvider,
+    
+    // Modal Service token provider (singleton, useExisting)
+    { provide: MODAL_SERVICE, useExisting: ModalService },
   ]
 };

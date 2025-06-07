@@ -30,6 +30,28 @@ export class StorageInitializationStateService {
     return s;
   });
 
+  // Expose a signal for the state (for consumers)
+  readonly stateSignal = this.state;
+
+  // Overlay is visible if initializing, loading, or waiting for reconnection
+  readonly overlayVisibleSignal = computed(() => {
+    const s = this._state();
+    return s.isInitializing || s.storageLoading || s.waitingForReconnectionPrompt;
+  });
+
+  // Show reconnection modal if waiting for reconnection prompt and prompt is present
+  readonly showReconnectionModalSignal = computed(() => {
+    const s = this._state();
+    return s.waitingForReconnectionPrompt && !!s.reconnectionPrompt;
+  });
+
+  // Signal for reconnection modal result (null = not answered, true/false = user choice)
+  private readonly _reconnectionModalResultSignal = signal<boolean | null>(null);
+  readonly reconnectionModalResultSignal = this._reconnectionModalResultSignal.asReadonly();
+  setReconnectionModalResult(result: boolean | null) {
+    this._reconnectionModalResultSignal.set(result);
+  }
+
   setInitializing(isInitializing: boolean) {
     console.log('[STATE][StorageInitializationStateService] setInitializing:', isInitializing);
     this._state.update(s => ({ ...s, isInitializing }));

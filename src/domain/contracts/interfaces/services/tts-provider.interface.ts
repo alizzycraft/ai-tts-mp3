@@ -2,5 +2,5 @@
 import { TTSSettings } from '../../../entities/tts.entity';
 
 export interface ITTSProviderService {
-  generateSpeech(text: string, settings: TTSSettings): Promise<Uint8Array>;
+  generateSpeech(text: string, settings: TTSSettings): /*todo:convert*/ Promise<Uint8Array>;
 }

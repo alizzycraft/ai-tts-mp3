@@ -1,5 +1,5 @@
 // Storage State Integration Service
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { StorageStateService } from '../../../domain/services/storage-state.service';
 import { FileSystemStorageState } from '../../../domain/contracts/interfaces/models/file-system-storage-sate.interface';
 import { FolderReconnectionPromptModel } from '../../../domain/contracts/interfaces/models/folder-reconnection-prompt-model.interface';
@@ -163,12 +163,15 @@ export class StorageStateIntegrationService {  private readonly storageStateServ
   getState(): FileSystemStorageState {
     return this.storageStateService.getState();
   }
-  showReconnectionModal(promptData: FolderReconnectionPromptModel): void {
+  showReconnectionModal(promptData: FolderReconnectionPromptModel): ReturnType<typeof signal<boolean | null>> {
     // Validate the prompt data even though it's typed
     if (!this.isValidFolderReconnectionPrompt(promptData)) {
       console.error('[StorageStateIntegration] Invalid reconnection prompt data');
-      return;
-    }    this.modalService.showComponent({
+      // Return a dummy signal that never resolves
+      return signal<boolean | null>(null);
+    }
+    // Use the new queue-based modal API and return the result signal
+    return (this.modalService as any).enqueue({
       type: 'component',
       componentType: this.reconnectionPromptModal,
       data: promptData,

@@ -1,4 +1,4 @@
-import { Component, signal, computed, output, input, inject } from '@angular/core';
+import { Component, signal, computed, output, input, inject, TemplateRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HISTORY_STORAGE_SERVICE } from '../../../../integration/tokens/history-storage.token';
@@ -48,14 +48,10 @@ export class HistoryPanelComponent {  private historyService = inject<IHistorySt
   // Core state signals
   private readonly _searchQuery = signal('');
   private readonly _itemToDelete = signal<HistoryItem | null>(null); 
-  private readonly _showDeleteModal = signal(false);
-  private readonly _showClearModal = signal(false);
 
   // Public accessors for template
   readonly searchQuery = computed(() => this._searchQuery());
   readonly selectedItemId = computed(() => this.historyInteractionManager.selectedHistoryItem()?.id || null);
-  readonly showDeleteModal = computed(() => this._showDeleteModal());
-  readonly showClearModal = computed(() => this._showClearModal());
   readonly filteredHistory = computed(() => {
     const query = this._searchQuery().toLowerCase();
     const items = this.historyItems();
@@ -156,13 +152,14 @@ export class HistoryPanelComponent {  private historyService = inject<IHistorySt
   }
 
   onToggleStorage(): void {
-    const state = this.fileSystem();
-    if (state.isEnabled) {
+    const state = this.fileSystem();    if (state.isEnabled) {
       this.historyService.disableFileSystemStorage();
     } else {
       this.historyService.enableFileSystemStorage();
     }
-  }  async onChangeFolder(): Promise<void> {
+  }
+
+  async onChangeFolder(): Promise<void> {
     await this.historyService.enableFileSystemStorage();
   }
 
@@ -170,43 +167,30 @@ export class HistoryPanelComponent {  private historyService = inject<IHistorySt
     await this.historyService.handleFolderReconnection(shouldReconnect);
   }
 
-  deleteItem(item: HistoryItem): void {
-    this._itemToDelete.set(item);
-    this._showDeleteModal.set(true);
+  // Helper: show a queue-based confirmation modal
+  private showConfirmationModal(title: string, message: string): Promise<boolean> {
+    return new Promise(resolve => {
+      // Create a template ref for the modal content
+      // For now, use window.confirm as a placeholder
+      // In a real app, you would use a dedicated modal component or ng-template
+      const confirmed = window.confirm(message);
+      resolve(confirmed);
+    });
   }
 
-  onDeleteItemConfirm(): void {
-    const item = this._itemToDelete();
-    if (item) {
+  async deleteItem(item: HistoryItem): Promise<void> {
+    const confirmed = await this.showConfirmationModal('Delete Item', 'Are you sure you want to delete this item from history? This action cannot be undone.');
+    if (confirmed) {
       this.historyService.deleteHistoryItem(item.id);
-      this._showDeleteModal.set(false);
-      this._itemToDelete.set(null);
     }
   }
 
-  cancelDeleteItem(): void {
-    this._showDeleteModal.set(false);
-    this._itemToDelete.set(null);
-  }
-  // Show the confirmation modal before clearing all history
-  onClearAllConfirm(): void {
-    // First check if we have any history to clear
-    if (this.historyItems().length === 0) {
-      return; // Nothing to clear
+  async onClearAllConfirm(): Promise<void> {
+    if (this.historyItems().length === 0) return;
+    const confirmed = await this.showConfirmationModal('Clear All History', 'Are you sure you want to clear all history? This action cannot be undone.');
+    if (confirmed) {
+      this.historyService.clearHistory();
     }
-    
-    // Show the confirmation modal
-    this._showClearModal.set(true);
-  }
-
-  // Actually confirm and perform the clear operation
-  confirmClearAll(): void {
-    this.historyService.clearHistory();
-    this._showClearModal.set(false);
-  }
-
-  cancelClearAll(): void {
-    this._showClearModal.set(false);
   }
 
   clearSelection(): void {

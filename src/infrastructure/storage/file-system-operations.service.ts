@@ -1,6 +1,7 @@
 // File System Operations Service - Handles File System Access API operations
 import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
+import { signal } from '@angular/core';
 
 // Polyfill for DirectoryPickerOptions if not present
 interface DirectoryPickerOptions {
@@ -42,134 +43,152 @@ export class FileSystemOperationsService {
     return typeof window !== 'undefined' && 'showDirectoryPicker' in window;
   }
 
-  // Show directory picker and return selected directory handle
-  async selectDirectory(options?: {
+  /**
+   * Signal-based folder picker: returns a signal that emits the handle or null
+   */
+  selectDirectorySignal(options?: {
     isReconnection?: boolean;
     previousPath?: string;
-  }): Promise<FileSystemDirectoryHandle> {
+  }) {
+    const result = signal<FileSystemDirectoryHandle | null>(null);
     if (!this.isBrowser || !this.isFileSystemAccessSupported()) {
-      throw new Error('File System Access API not supported');
+      result.set(null);
+      return result.asReadonly();
     }
-
-    // Prepare directory picker options
     const pickerOptions: DirectoryPickerOptions = {
       mode: 'readwrite',
       startIn: 'documents'
     };
-
-    // If reconnecting and we have a previous folder path, try to help user find it
     if (options?.isReconnection && options?.previousPath) {
       pickerOptions.startIn = 'documents';
-    }    // Show directory picker
-    const handle = await (window as unknown as { showDirectoryPicker: (options?: DirectoryPickerOptions) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker(pickerOptions);
-
-    // Test write permissions by attempting to create a test file
-    await this.testWritePermissions(handle);
-
-    return handle;
-  }
-  // Test write permissions by creating and removing a test file
-  async testWritePermissions(handle: FileSystemDirectoryHandle): Promise<void> {
-    try {
-      const testHandle = await (handle as ExtendedFileSystemDirectoryHandle).getFileHandle('tts-permission-test.tmp', { create: true });
-      await (testHandle as ExtendedFileSystemFileHandle).remove();
-    } catch (permissionError) {
-      console.error('[FileSystemOperations] Write permission test failed:', permissionError);
-      throw new Error('Write permission denied for selected folder. Please choose a folder you have write access to.');
     }
+    (window as unknown as { showDirectoryPicker: (options?: DirectoryPickerOptions) => Promise<FileSystemDirectoryHandle> })
+      .showDirectoryPicker(pickerOptions)
+      .then(handle => {
+        // Use the signal-based permission test with polling
+        const permSignal = this._testWritePermissionsSignal(handle);
+        const poll = setInterval(() => {
+          const success = permSignal();
+          if (success === true) {
+            result.set(handle);
+            clearInterval(poll);
+          } else if (success === false) {
+            result.set(null);
+            clearInterval(poll);
+          }
+        }, 30);
+      })
+      .catch(() => result.set(null));
+    return result.asReadonly();
   }
 
-  // Write file to directory
-  async writeFile(
-    directoryHandle: FileSystemDirectoryHandle,
-    fileName: string,
-    data: ArrayBuffer | Uint8Array | string
-  ): Promise<void> {
-    if (!this.isBrowser) return;    try {
-      const fileHandle = await (directoryHandle as ExtendedFileSystemDirectoryHandle).getFileHandle(fileName, { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(data);
-      await writable.close();
-    } catch (error) {
-      console.error(`[FileSystemOperations] Failed to write file ${fileName}:`, error);
-      throw error;
+  private _testWritePermissionsSignal(handle: FileSystemDirectoryHandle) {
+    const result = signal<boolean | null>(null);
+    (handle as ExtendedFileSystemDirectoryHandle)
+      .getFileHandle('tts-permission-test.tmp', { create: true })
+      .then(testHandle => (testHandle as ExtendedFileSystemFileHandle).remove().then(() => result.set(true)))
+      .catch(() => result.set(false));
+    return result.asReadonly();
+  }
+
+  /**
+   * Signal-based write file
+   */
+  writeFileSignal(directoryHandle: FileSystemDirectoryHandle, fileName: string, data: ArrayBuffer | Uint8Array | string) {
+    const result = signal<'success' | 'error' | 'not-browser'>('not-browser');
+    if (!this.isBrowser) {
+      result.set('not-browser');
+      return result.asReadonly();
     }
+    (directoryHandle as ExtendedFileSystemDirectoryHandle)
+      .getFileHandle(fileName, { create: true })
+      .then(fileHandle => fileHandle.createWritable())
+      .then(writable => writable.write(data).then(() => writable.close()))
+      .then(() => result.set('success'))
+      .catch(() => result.set('error'));
+    return result.asReadonly();
   }
 
-  // Read file from directory
-  async readFile(
-    directoryHandle: FileSystemDirectoryHandle,
-    fileName: string
-  ): Promise<File | null> {
-    if (!this.isBrowser) return null;    try {
-      const fileHandle = await (directoryHandle as ExtendedFileSystemDirectoryHandle).getFileHandle(fileName, { create: false });
-      return await fileHandle.getFile();
-    } catch (error: unknown) {
-      if (error instanceof Error && error.name === 'NotFoundError') {
-        return null; // File not found is expected for new folders
-      }
-      throw error; // Re-throw other errors
+  /**
+   * Signal-based read file
+   */
+  readFileSignal(directoryHandle: FileSystemDirectoryHandle, fileName: string) {
+    const result = signal<File | null>(null);
+    if (!this.isBrowser) {
+      result.set(null);
+      return result.asReadonly();
     }
+    (directoryHandle as ExtendedFileSystemDirectoryHandle)
+      .getFileHandle(fileName, { create: false })
+      .then(fileHandle => fileHandle.getFile())
+      .then(file => result.set(file))
+      .catch(() => result.set(null));
+    return result.asReadonly();
   }
 
-  // Delete file from directory
-  async deleteFile(
-    directoryHandle: FileSystemDirectoryHandle,
-    fileName: string
-  ): Promise<void> {
-    if (!this.isBrowser) return;    try {
-      await (directoryHandle as ExtendedFileSystemDirectoryHandle).removeEntry(fileName);
-    } catch (error: unknown) {
-      if (!(error instanceof Error && error.name === 'NotFoundError')) {
-        console.error(`[FileSystemOperations] Error deleting file ${fileName}:`, error);
-        throw error;
-      }
+  /**
+   * Signal-based delete file
+   */
+  deleteFileSignal(directoryHandle: FileSystemDirectoryHandle, fileName: string) {
+    const result = signal<'success' | 'error' | 'not-browser'>('not-browser');
+    if (!this.isBrowser) {
+      result.set('not-browser');
+      return result.asReadonly();
     }
+    (directoryHandle as ExtendedFileSystemDirectoryHandle)
+      .removeEntry(fileName)
+      .then(() => result.set('success'))
+      .catch(() => result.set('error'));
+    return result.asReadonly();
   }
 
-  // List all MP3 files in directory
-  async listMp3Files(directoryHandle: FileSystemDirectoryHandle): Promise<string[]> {
-    if (!this.isBrowser) return [];
-
-    const mp3Files: string[] = [];
-    try {
-      for await (const entry of (directoryHandle as DirectoryHandleWithEntries).entries()) {
-        const [name, entryHandle] = entry;
-        if (entryHandle.kind === 'file' && name.endsWith('.mp3')) {
-          mp3Files.push(name);
-        }
-      }
-    } catch (error) {
-      console.error('[FileSystemOperations] Error listing MP3 files:', error);
+  /**
+   * Signal-based list all MP3 files in directory
+   */
+  listMp3FilesSignal(directoryHandle: FileSystemDirectoryHandle) {
+    const result = signal<string[]>([]);
+    if (!this.isBrowser) {
+      result.set([]);
+      return result.asReadonly();
     }
-    return mp3Files;
-  }
-  // Delete all MP3 files in directory
-  async deleteAllMp3Files(directoryHandle: FileSystemDirectoryHandle): Promise<void> {
-    if (!this.isBrowser) return;
-
-    const mp3Files = await this.listMp3Files(directoryHandle);
-    for (const fileName of mp3Files) {
+    (async () => {
+      const mp3Files: string[] = [];
       try {
-        await this.deleteFile(directoryHandle, fileName);
-      } catch (error) {
-        console.error(`[FileSystemOperations] Failed to delete audio file ${fileName}:`, error);
+        for await (const entry of (directoryHandle as DirectoryHandleWithEntries).entries()) {
+          const [name, entryHandle] = entry;
+          if (entryHandle.kind === 'file' && name.endsWith('.mp3')) {
+            mp3Files.push(name);
+          }
+        }
+        result.set(mp3Files);
+      } catch {
+        result.set([]);
       }
-    }
+    })();
+    return result.asReadonly();
   }
 
-  // Reconnect to a previously stored directory
-  async reconnectToStoredDirectory(options?: {
-    previousPath?: string;
-  }): Promise<FileSystemDirectoryHandle> {
-    if (!this.isBrowser || !this.isFileSystemAccessSupported()) {
-      throw new Error('File System Access API not supported');
+  /**
+   * Signal-based delete all MP3 files in directory
+   */
+  deleteAllMp3FilesSignal(directoryHandle: FileSystemDirectoryHandle) {
+    const result = signal<'success' | 'error' | 'not-browser'>('not-browser');
+    if (!this.isBrowser) {
+      result.set('not-browser');
+      return result.asReadonly();
     }
+    this.listMp3FilesSignal(directoryHandle)().forEach(fileName => {
+      this.deleteFileSignal(directoryHandle, fileName)();
+    });
+    result.set('success');
+    return result.asReadonly();
+  }
 
-    // Since File System Access API doesn't provide a way to directly reconnect to a stored handle,
-    // we need to prompt the user to select the directory again
-    // We can provide context to help them find the same folder they used before
-    return await this.selectDirectory({
+  /**
+   * Signal-based reconnect to a previously stored directory
+   */
+  reconnectToStoredDirectorySignal(options?: { previousPath?: string }) {
+    return this.selectDirectorySignal({
       isReconnection: true,
       previousPath: options?.previousPath
     });

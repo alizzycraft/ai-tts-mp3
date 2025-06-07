@@ -6,5 +6,5 @@ export interface ITTSProviderFactory {
   validateProviderConfiguration(
     provider: ModelProvider,
     settings: TTSSettings
-  ): Promise<Result<boolean, string>>;
+  ): /*todo:convert*/ Promise<Result<boolean, string>>;
 }

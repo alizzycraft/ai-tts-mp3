@@ -1,13 +1,15 @@
 import { CommonModule } from '@angular/common';
 import { Component, ChangeDetectionStrategy, HostListener, AfterViewInit, ElementRef, inject, Type, TemplateRef } from '@angular/core';
-import { MODAL_SERVICE } from '../../../integration/tokens/modal-service.token';
-import { RECONNECTION_PROMPT_MODAL } from '../../../integration/tokens/reconnection-prompt-modal.token';
-import type { IModalOutlet } from '../../../integration/interfaces/components/modal-outlet.interface';
+import { MODAL_SERVICE } from '../../../domain/contracts/tokens/modal-service.token';
+import type { IModalService } from '../../../domain/contracts/interfaces/services/modal-service.interface';
+import type { IModalOutlet } from '../../../domain/contracts/interfaces/components/modal-outlet.interface';
+import { RECONNECTION_PROMPT_MODAL } from '../../../domain/contracts/tokens/reconnection-prompt-modal.token';
 
 @Component({
   selector: 'app-modal-outlet',
   standalone: true,  imports: [CommonModule],
   template: `    
+    <div style="position:fixed;top:0;left:0;z-index:9999;background:#f00;color:#fff;padding:4px;font-size:12px;">[DEBUG] ModalOutletComponent rendered, isOpen: {{ isOpen() }}</div>
     @if (isOpen()) {
       <div 
         class="modal-backdrop" 
@@ -28,9 +30,9 @@ import type { IModalOutlet } from '../../../integration/interfaces/components/mo
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ModalOutletComponent implements AfterViewInit, IModalOutlet {
-  private readonly modalService = inject(MODAL_SERVICE);
-  private readonly elementRef = inject(ElementRef);
+  private readonly modalService = inject<IModalService>(MODAL_SERVICE);
   private readonly reconnectionPromptModal = inject(RECONNECTION_PROMPT_MODAL);
+  private readonly elementRef = inject(ElementRef);
 
   private previousActiveElement: HTMLElement | null = null;
 
@@ -115,24 +117,24 @@ export class ModalOutletComponent implements AfterViewInit, IModalOutlet {
     }
   }
 
-  // Add public accessor methods
+  // Use the new queue-based modal service signal directly
   isOpen(): boolean {
-    return this.modalService.isOpen();
+    // Use 'as any' to access isAnyOpen from the concrete ModalService
+    return (this.modalService as any).isAnyOpen();
   }
   getTemplate(): TemplateRef<unknown> | null {
     return this.modalService.template() as TemplateRef<unknown> | null;
   }
-
-  // Type guard for Angular Type
-  private static isType(value: unknown): value is Type<unknown> {
-    return typeof value === 'function' && value.prototype && value.prototype.constructor;
-  }
-
   getComponentType(): Type<unknown> | null {
     const componentType = this.modalService.componentType();
     if (ModalOutletComponent.isType(componentType)) {
       return componentType;
     }
     return null;
+  }
+
+  // Type guard for Angular Type
+  private static isType(value: unknown): value is Type<unknown> {
+    return typeof value === 'function' && value.prototype && value.prototype.constructor;
   }
 }

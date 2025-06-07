@@ -7,6 +7,9 @@ import { StorageMigrationService } from './storage-migration.service';
 import { HistoryManagementService } from './history-management.service';
 import { HistoryItem } from '../../domain/types/storage-types';
 import { StorageInitializationStateService } from './storage-initialization-state.service';
+import { computed, signal, effect } from '@angular/core';
+import { ModalService } from '../../integration/services/ui/modal.service';
+import { RECONNECTION_PROMPT_MODAL } from '../../integration/tokens/reconnection-prompt-modal.token';
 
 @Injectable({
   providedIn: 'root'
@@ -18,6 +21,8 @@ export class FileSystemStorageManagerService {
   private migration = inject(StorageMigrationService);
   private historyManagement = inject(HistoryManagementService);
   private initializationState = inject(StorageInitializationStateService);
+  private modalService = inject(ModalService);
+  private reconnectionPromptModal = inject(RECONNECTION_PROMPT_MODAL);
 
   // Flag to ensure initialization happens only once
   private initialized = false;
@@ -28,36 +33,65 @@ export class FileSystemStorageManagerService {
   }
 
   /**
-   * Initialize service and check for previous folder state (Browser only)
+   * Signal-driven initialization state
    */
-  async initializeService(): Promise<{ success: boolean; waitingForUser?: boolean }> {
-    // Add a guard to prevent multiple initializations
-    if (this.initialized) {
-      console.log('[STATE][FileSystemStorageManagerService] initializeService: already initialized');
-      return { success: true };
-    }
+  private _initState = signal<'idle' | 'loading' | 'waitingForReconnection' | 'ready' | 'error'>('idle');
+  readonly initState = this._initState.asReadonly();
 
-    if (!this.isBrowser) {
-      console.log('[STATE][FileSystemStorageManagerService] initializeService: not in browser');
-      return { success: true };
+  /**
+   * Signal-driven result of reconnection modal
+   */
+  private _reconnectionResult = signal<null | boolean>(null);
+  readonly reconnectionResult = this._reconnectionResult.asReadonly();
+
+  /**
+   * Signal-driven initialization state machine (pure, no async/await)
+   * This replaces initializeService and handleFolderReconnection with a fully signal-driven approach.
+   */
+  readonly initializationStateSignal = this.initializationState.stateSignal; // Expose state signal for UI/other services
+
+  /**
+   * Computed signal: true if overlay should be shown (initializing, loading, or waiting for reconnection prompt)
+   */
+  readonly showOverlaySignal = this.initializationState.overlayVisibleSignal;
+
+  /**
+   * Computed signal: true if reconnection modal should be shown
+   */
+  readonly showReconnectionModalSignal = this.initializationState.showReconnectionModalSignal;
+
+  /**
+   * Computed signal: result of reconnection modal (null = not answered, true/false = user choice)
+   */
+  readonly reconnectionModalResultSignal = this.initializationState.reconnectionModalResultSignal;
+
+  /**
+   * Start initialization (signal-driven, no async/await)
+   */
+  startInitialization() {
+    console.log('[FSM] startInitialization called, _initState:', this._initState(), 'lastPromptPath:', this.lastPromptPath);
+    if (this._initState() !== 'idle') {
+      console.warn('[FSM] startInitialization: not idle, skipping');
+      return;
     }
-    
-    return await new Promise((resolve) => {
-      console.log('[STATE][FileSystemStorageManagerService] initializeService: starting');
-      this.initializationState.setInitializing(true);
-      this.initializationState.setStorageLoaded(false);
-      this.initializationState.setStorageLoading(false);
-      // Check file system support first
-      const isSupported = this.fileSystemOperations.isFileSystemAccessSupported();
-      console.log('[STATE][FileSystemStorageManagerService] File system supported:', isSupported);
-      // Initialize storage state (this loads saved state)
-      this.storageState.loadStorageState(() => {
-        this.initializationState.setStorageStateLoaded(true);
-        // Check for reconnection after loading state
-        const folderState = this.storageState.getPreviousFolderState();
-        console.log('[STATE][FileSystemStorageManagerService] Previous folder state:', folderState);
-        if (isSupported && folderState?.selectedPath) {
-          // Set storage mode to 'none' (not local, not file) until user chooses
+    if (this.storageState.folderReconnectionPrompt()) {
+      console.warn('[FSM] startInitialization: prompt already pending, skipping');
+      return;
+    }
+    this._initState.set('loading');
+    this.initializationState.setInitializing(true);
+    this.initializationState.setStorageLoaded(false);
+    this.initializationState.setStorageLoading(false);
+    const isSupported = this.fileSystemOperations.isFileSystemAccessSupported();
+    console.log('[FSM] isFileSystemAccessSupported:', isSupported);
+    this.storageState.loadStorageState(() => {
+      this.initializationState.setStorageStateLoaded(true);
+      const folderState = this.storageState.getPreviousFolderState();
+      const existingPrompt = this.storageState.folderReconnectionPrompt();
+      console.log('[FSM] folderState:', folderState, 'existingPrompt:', existingPrompt);
+      if (isSupported && folderState?.selectedPath) {
+        // Only enqueue the modal if there is no prompt for this path
+        if (!existingPrompt || existingPrompt.previousPath !== folderState.selectedPath) {
           this.storageState.setStorageMode('none');
           this.storageState.setStorageReady(false);
           this.storageState.updateFileSystemState({
@@ -65,37 +99,203 @@ export class FileSystemStorageManagerService {
             directoryHandle: null,
             selectedPath: folderState.selectedPath
           });
-          // Set reconnection prompt
           const prompt = { previousPath: folderState.selectedPath, shouldPrompt: true };
+          console.log('[FSM] setting reconnection prompt:', prompt);
           this.storageState.setFolderReconnectionPrompt(prompt);
           this.initializationState.setWaitingForReconnectionPrompt(true, prompt);
-          console.log('[STATE][FileSystemStorageManagerService] Waiting for reconnection prompt');
-          // Do NOT set isInitializing to false here; wait until storage is loaded after user response
-          this.initialized = true;
-          resolve({ success: true, waitingForUser: true });
-          return;
+          this._initState.set('waitingForReconnection');
+          this.modalService.enqueue({
+            type: 'component',
+            componentType: this.reconnectionPromptModal,
+            data: prompt,
+            allowDismiss: false
+          });
+          console.log('[FSM] Modal enqueued for path:', prompt.previousPath);
+        } else {
+          console.log('[FSM] Modal already enqueued for path:', folderState.selectedPath);
         }
-        // If no prompt needed, set storage mode to 'local' and load history
-        this.storageState.setStorageMode('local');
-        this.storageState.setStorageReady(false);
+        return;
+      }
+      // No reconnection needed, load local history
+      this.storageState.setStorageMode('local');
+      this.storageState.setStorageReady(false);
+      this.initializationState.setStorageLoading(true);
+      this.historyManagement.loadHistory().then(() => {
+        this.storageState.setStorageReady(true);
+        this.initializationState.setStorageLoading(false);
+        this.initializationState.setStorageLoaded(true);
+        this.initializationState.setInitializing(false);
+        this._initState.set('ready');
+        console.log('[FSM] local history loaded, state ready');
+      }).catch(error => {
+        this.initializationState.setInitializationError('[FileSystemStorageManagerService] Error during initialization: ' + (error instanceof Error ? error.message : String(error)));
+        this.initializationState.setInitializing(false);
+        this.initializationState.setStorageLoading(false);
+        this._initState.set('error');
+        console.error('[FSM] error during local history load:', error);
+      });
+    });
+  }
+
+  private lastPromptPath: string | null = null;
+  private modalResultSignal: ReturnType<typeof signal<boolean | null>> | null = null;
+
+  constructor() {
+    // Pure signal-driven modal workflow: react to reconnectionModalResultSignal
+    computed(() => {
+      const result = this.initializationState.reconnectionModalResultSignal();
+      if (result === true) {
+        this.initializationState.setReconnectionModalResult(null);
+        // Synchronously start folder picker logic
         this.initializationState.setStorageLoading(true);
-        console.log('[STATE][FileSystemStorageManagerService] Loading history from local storage...');
-        this.historyManagement.loadHistory().then(() => {
+        this.initializationState.setStorageLoaded(false);
+        this._initState.set('waitingForReconnection');
+        this.storageState.updateFileSystemState({ isEnabled: false });
+        this.storageState.setStorageMode('none');
+        this.storageState.setStorageReady(false);
+        this.storageState.saveFolderState();
+        // Call selectDirectory and handle result synchronously
+        this.fileSystemOperations.selectDirectory({
+          isReconnection: true,
+          previousPath: this.storageState.getPreviousFolderState()?.selectedPath
+        }).then(handle => {
+          if (!handle || typeof handle.name !== 'string' || !handle.name) {
+            throw new Error('Selected directory handle is missing a valid name.');
+          }
+          this.storageState.updateFileSystemState({
+            isEnabled: true,
+            directoryHandle: handle,
+            selectedPath: handle.name
+          });
+          this.storageState.saveStorageState();
+          this.storageState.saveFolderState();
+          this.storageState.setStorageMode('file');
+          this.storageState.setStorageReady(false);
+          this.migration.loadFromFileSystem(handle).then(fileSystemHistory => {
+            this.historyManagement.setHistory(fileSystemHistory).then(() => {
+              this.storageState.setStorageReady(true);
+              this.initializationState.setStorageLoading(false);
+              this.initializationState.setStorageLoaded(true);
+              this.initializationState.setInitializing(false);
+              this._initState.set('ready');
+              console.log('[FSM] User accepted reconnection, file system history loaded, state ready');
+            });
+          });
+        }).catch(error => {
+          // If user cancels, re-show the modal and keep overlay
+          console.warn('[FSM] Folder selection cancelled or failed:', error);
+          this.initializationState.setWaitingForReconnectionPrompt(true, this.storageState.getPreviousFolderState() ? { previousPath: this.storageState.getPreviousFolderState()!.selectedPath, shouldPrompt: true } : null);
+          this._initState.set('waitingForReconnection');
+          // Re-enqueue the modal
+          if (this.storageState.getPreviousFolderState()) {
+            this.modalService.enqueue({
+              type: 'component',
+              componentType: this.reconnectionPromptModal,
+              data: { previousPath: this.storageState.getPreviousFolderState()!.selectedPath, shouldPrompt: true },
+              allowDismiss: false
+            });
+          }
+        });
+      } else if (result === false) {
+        this.initializationState.setReconnectionModalResult(null);
+        this.handleFolderReconnectionSignal(false);
+      }
+    });
+  }
+
+  /**
+   * Handle folder reconnection result (signal-driven)
+   */
+  // Make this method public so it can be called from AppComponent
+  handleFolderReconnectionSignal(reconnect: boolean) {
+    console.log('[FSM] handleFolderReconnectionSignal called, reconnect:', reconnect);
+    this.initializationState.setWaitingForReconnectionPrompt(false);
+    if (!reconnect) {
+      // User declined reconnection: load local history, only set ready after load
+      this.initializationState.setStorageLoading(true);
+      this.initializationState.setStorageLoaded(false);
+      this.lastPromptPath = null;
+      this.storageState.clearFolderReconnectionPrompt();
+      this.storageState.setStorageMode('local');
+      this.storageState.setStorageReady(false);
+      this.storageState.clearPreviousFolderState();
+      this.historyManagement.loadHistory().then(() => {
+        this.storageState.setStorageReady(true);
+        this.initializationState.setStorageLoading(false);
+        this.initializationState.setStorageLoaded(true);
+        this.initializationState.setInitializing(false);
+        this._initState.set('ready');
+        console.log('[FSM] User declined reconnection, local history loaded, state ready');
+      });
+      // Modal will close automatically by not re-enqueuing
+      return;
+    }
+    // User accepted reconnection: wait for folder selection
+    this.initializationState.setStorageLoading(true);
+    this.initializationState.setStorageLoaded(false);
+    this._initState.set('waitingForReconnection');
+    this.storageState.updateFileSystemState({ isEnabled: false });
+    this.storageState.setStorageMode('none');
+    this.storageState.setStorageReady(false);
+    this.storageState.saveFolderState();
+    // Start folder selection
+    this.fileSystemOperations.selectDirectory({
+      isReconnection: true,
+      previousPath: this.storageState.getPreviousFolderState()?.selectedPath
+    }).then(handle => {
+      if (!handle || typeof handle.name !== 'string' || !handle.name) {
+        throw new Error('Selected directory handle is missing a valid name.');
+      }
+      this.storageState.updateFileSystemState({
+        isEnabled: true,
+        directoryHandle: handle,
+        selectedPath: handle.name
+      });
+      this.storageState.saveStorageState();
+      this.storageState.saveFolderState();
+      this.storageState.setStorageMode('file');
+      this.storageState.setStorageReady(false);
+      this.migration.loadFromFileSystem(handle).then(fileSystemHistory => {
+        this.historyManagement.setHistory(fileSystemHistory).then(() => {
           this.storageState.setStorageReady(true);
           this.initializationState.setStorageLoading(false);
           this.initializationState.setStorageLoaded(true);
           this.initializationState.setInitializing(false);
-          this.initialized = true;
-          console.log('[STATE][FileSystemStorageManagerService] Initialization complete (local storage)');
-          resolve({ success: true });
-        }).catch(error => {
-          this.initializationState.setInitializationError('[FileSystemStorageManagerService] Error during initialization: ' + (error instanceof Error ? error.message : String(error)));
-          this.initializationState.setInitializing(false);
-          this.initializationState.setStorageLoading(false);
-          console.error('[STATE][FileSystemStorageManagerService] Initialization error:', error);
-          resolve({ success: false });
+          this._initState.set('ready');
+          console.log('[FSM] User accepted reconnection, file system history loaded, state ready');
         });
       });
+      // Modal will close automatically by not re-enqueuing
+    }).catch(error => {
+      // If user cancels, re-show the modal and keep overlay
+      console.warn('[FSM] Folder selection cancelled or failed:', error);
+      this.initializationState.setWaitingForReconnectionPrompt(true, this.storageState.getPreviousFolderState() ? { previousPath: this.storageState.getPreviousFolderState()!.selectedPath, shouldPrompt: true } : null);
+      this._initState.set('waitingForReconnection');
+      // Re-enqueue the modal
+      if (this.storageState.getPreviousFolderState()) {
+        this.modalService.enqueue({
+          type: 'component',
+          componentType: this.reconnectionPromptModal,
+          data: { previousPath: this.storageState.getPreviousFolderState()!.selectedPath, shouldPrompt: true },
+          allowDismiss: false
+        });
+      }
+    });
+  }
+
+  /**
+   * Finalize initialization after reconnection or fallback
+   */
+  private finishInitializationAfterReconnection() {
+    console.log('[FSM] finishInitializationAfterReconnection called');
+    this.storageState.clearFolderReconnectionPrompt();
+    this.historyManagement.loadHistory().then(() => {
+      this.storageState.setStorageReady(true);
+      this.initializationState.setStorageLoading(false);
+      this.initializationState.setStorageLoaded(true);
+      this.initializationState.setInitializing(false);
+      this._initState.set('ready');
+      console.log('[FSM] finishInitializationAfterReconnection: ready');
     });
   }
 
@@ -106,18 +306,16 @@ export class FileSystemStorageManagerService {
     console.log('[STATE][FileSystemStorageManagerService] handleFolderReconnection called, reconnect:', reconnect);
     if (!this.isBrowser) return;
 
-    // Get current prompt value directly from signal
-    const prompt = this.storageState.folderReconnectionPrompt();
-    console.log('[STATE][FileSystemStorageManagerService] Current reconnection prompt:', prompt);
+    // Only set waitingForReconnectionPrompt to false if it was true
     this.initializationState.setWaitingForReconnectionPrompt(false, null);
     this.initializationState.setStorageLoading(true);
     this.initializationState.setStorageLoaded(false);
     
-    // For reconnect=false, clear the prompt immediately
     if (!reconnect) {
       this.storageState.clearFolderReconnectionPrompt();
       this.storageState.setStorageMode('local');
       this.storageState.setStorageReady(false);
+      this.storageState.clearPreviousFolderState(); // Clear so prompt is not re-triggered
       console.log('[STATE][FileSystemStorageManagerService] User chose local storage');
     }
 
@@ -128,6 +326,7 @@ export class FileSystemStorageManagerService {
           this.storageState.updateFileSystemState({ isEnabled: true });
           this.storageState.setStorageMode('file');
           this.storageState.setStorageReady(true);
+          this.storageState.saveFolderState(); // Save the new connected folder state
           console.log('[STATE][FileSystemStorageManagerService] User reconnected to file system storage');
         } else {
           this.storageState.clearPreviousFolderState();

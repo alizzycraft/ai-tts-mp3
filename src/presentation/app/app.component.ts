@@ -2,7 +2,7 @@ import { Component, PLATFORM_ID, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { isPlatformBrowser } from '@angular/common';
 import { ModalOutletComponent } from './modals/modal-outlet.component';
-import { signal, computed, effect } from '@angular/core';
+import { signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { StorageInitializationStateService } from '../../infrastructure/storage/storage-initialization-state.service';
 import { StorageStateIntegrationService } from '../../integration/services/storage/storage-state-integration.service';
@@ -21,7 +21,6 @@ import { FileSystemStorageManagerService } from '../../infrastructure/storage/fi
     </div>
     <router-outlet *ngIf="appInitialized()"></router-outlet>
     <app-modal-outlet />
-    {{ maybeShowReconnectionModal() }}
   `,
   styles: []
 })
@@ -40,43 +39,13 @@ export class AppComponent {
     if (isPlatformBrowser(this.platformId)) {
       document.title = 'AI-TTS-MP3';
       // Ensure storage initialization is triggered
-      this.fileSystemStorageManager.initializeService();
-      // Listen for modal response and handle reconnection
-      const modalService = (this.storageIntegration as any).modalService;
-      effect(() => {
-        const response = modalService?.response?.();
-        if (response && response.requestId !== this.modalResponseHandledFor) {
-          this.modalResponseHandledFor = response.requestId;
-          // Only handle if we are waiting for reconnection
-          const state = this.storageInitState.state();
-          if (state.waitingForReconnectionPrompt) {
-            // response.value: true = reconnect, false = decline
-            this.fileSystemStorageManager.handleFolderReconnection(!!response.value);
-          }
-          modalService.clearResponse?.();
-        }
-      });
+      this.fileSystemStorageManager.startInitialization?.();
+      // Listen for reconnection modal result via queue-based API
+      // EFFECT REMOVED: All modal and state transitions must be signal-driven and pure.
+      // The modalService and state machine now handle all modal queueing and result delivery.
+      // If you need to react to modal results, use a computed or subscribe to a signal in a pure way.
     }
   }
-
-  // Purely signal-driven modal trigger (no effect):
-  public readonly maybeShowReconnectionModal = computed(() => {
-    const state = this.storageInitState.state();
-    console.log('[SIGNAL][AppComponent] maybeShowReconnectionModal SIGNAL EMIT:', state);
-    if (state.waitingForReconnectionPrompt && state.reconnectionPrompt) {
-      // Only show if not already shown for this path
-      if (this.lastPromptPath !== state.reconnectionPrompt.previousPath) {
-        this.lastPromptPath = state.reconnectionPrompt.previousPath;
-        // Show the modal (imperative, but only in computed context)
-        queueMicrotask(() => {
-          this.storageIntegration.showReconnectionModal(state.reconnectionPrompt!);
-        });
-      }
-    } else {
-      this.lastPromptPath = null;
-    }
-    return null;
-  });
 
   // App is initialized when storage is not initializing, not waiting for reconnection, and no error
   public readonly appInitialized = computed(() => {

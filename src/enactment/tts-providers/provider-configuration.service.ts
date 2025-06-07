@@ -139,7 +139,7 @@ export class ProviderConfigurationService {
     }
   }async validateProviderConfiguration(
     provider: ModelProvider
-  ): Promise<Result<ProviderValidationResult, string>> {
+  ): /*todo:convert*/ Promise<Result<ProviderValidationResult, string>> {
     try {
       this.logging.info(`Starting validation for provider ${provider}`, 'ProviderConfig');
 
@@ -199,7 +199,7 @@ export class ProviderConfigurationService {
       this.updateValidationResults(result);
       return Result.success(result);
     }
-  }  async loadProviderConfiguration(provider: ModelProvider): Promise<Result<ProviderConfiguration | null, string>> {
+  }  async loadProviderConfiguration(provider: ModelProvider): /*todo:convert*/ Promise<Result<ProviderConfiguration | null, string>> {
     try {
       const config = this.configurations().find(c => c.provider === provider);
       if (!config) {
@@ -219,12 +219,12 @@ export class ProviderConfigurationService {
       return Result.failure('Failed to load configuration');
     }
   }
-  loadAllProviderConfigurations(): Promise<Result<ProviderConfiguration[], string>> {
+  loadAllProviderConfigurations(): /*todo:convert*/ Promise<Result<ProviderConfiguration[], string>> {
     try {
-      return Promise.resolve(Result.success(this.mergedConfigurations()));
+      return /*todo:convert*/ Promise.resolve(Result.success(this.mergedConfigurations()));
     } catch (error) {
       this.logging.error('Failed to load provider configurations', error as Error, 'ProviderConfig');
-      return Promise.resolve(Result.failure('Failed to load configurations'));
+      return /*todo:convert*/ Promise.resolve(Result.failure('Failed to load configurations'));
     }
   }
   private updateValidationResults(result: ProviderValidationResult): void {
@@ -235,7 +235,7 @@ export class ProviderConfigurationService {
   }
 
 
-  async clearAllProviderConfigurations(): Promise<Result<void, string>> {
+  async clearAllProviderConfigurations(): /*todo:convert*/ Promise<Result<void, string>> {
     try {
       this.browserStorage.removeItem(this.STORAGE_KEY);
       this.configurations.set(this.getDefaultConfigurations());
@@ -280,7 +280,7 @@ export class ProviderConfigurationService {
       this.getDefaultConfiguration(ModelProvider.OPENAI)
     ];
   }
-  async saveProviderConfiguration(config: ProviderConfiguration): Promise<Result<void, string>> {
+  async saveProviderConfiguration(config: ProviderConfiguration): /*todo:convert*/ Promise<Result<void, string>> {
     try {
       // Create sanitized config without sensitive data
       const sanitizedConfig = { ...config };

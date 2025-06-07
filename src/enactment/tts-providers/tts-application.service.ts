@@ -31,7 +31,7 @@ export class TTSApplicationService {
     text: string, 
     settings: TTSSettings,
     metadata?: { title?: string; tags?: string[] }
-  ): Promise<Result<TTSQuery, string>> {
+  ): /*todo:convert*/ Promise<Result<TTSQuery, string>> {
     try {
       Logger.info('Creating TTS query', { textLength: text.length, provider: settings.provider });
         // Create sanitized settings for storage
@@ -92,7 +92,7 @@ export class TTSApplicationService {
     }
   }
 
-  async processTTSQuery(queryId: string): Promise<Result<TTSResult, string>> {
+  async processTTSQuery(queryId: string): /*todo:convert*/ Promise<Result<TTSResult, string>> {
     try {
       Logger.info('Processing TTS query', { queryId });
 
@@ -159,7 +159,7 @@ export class TTSApplicationService {
     }
   }
 
-  async getQueryResult(queryId: string): Promise<Result<TTSResult, string>> {
+  async getQueryResult(queryId: string): /*todo:convert*/ Promise<Result<TTSResult, string>> {
     try {
       Logger.info('Fetching query result', { queryId });
       const result = await this.resultRepository.findByQueryId(QueryId.fromString(queryId));
@@ -175,7 +175,7 @@ export class TTSApplicationService {
     }
   }
 
-  async getRecentQueries(limit = 10): Promise<Result<TTSQuery[], string>> {
+  async getRecentQueries(limit = 10): /*todo:convert*/ Promise<Result<TTSQuery[], string>> {
     try {
       Logger.info('Fetching recent queries', { limit });
       const queries = await this.queryRepository.findRecent(limit);
@@ -186,7 +186,7 @@ export class TTSApplicationService {
     }
   }
 
-  async saveSettings(settings: TTSSettings): Promise<Result<void, string>> {
+  async saveSettings(settings: TTSSettings): /*todo:convert*/ Promise<Result<void, string>> {
     try {
       Logger.info('Saving TTS settings', { provider: settings.provider });
       this.domainService.validateSettings(settings);
@@ -198,7 +198,7 @@ export class TTSApplicationService {
     }
   }
 
-  async loadSettings(): Promise<Result<TTSSettings | null, string>> {
+  async loadSettings(): /*todo:convert*/ Promise<Result<TTSSettings | null, string>> {
     try {
       Logger.info('Loading TTS settings');
       const settings = await this.settingsRepository.load();
@@ -209,7 +209,7 @@ export class TTSApplicationService {
     }
   }
 
-  async deleteQuery(queryId: string): Promise<Result<void, string>> {
+  async deleteQuery(queryId: string): /*todo:convert*/ Promise<Result<void, string>> {
     try {
       Logger.info('Deleting query', { queryId });
       const id = QueryId.fromString(queryId);

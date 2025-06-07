@@ -70,10 +70,10 @@ export class PlaybackService implements OnDestroy {
 
   /**
    * Loads audio from a TTS result but does not play it.
-   * Returns a promise that resolves when the audio is loaded and ready to play.
+   * Returns a /*todo:convert*/ Promise that resolves when the audio is loaded and ready to play.
    */
-  loadAudio(result: TTSResult, itemId?: string): Promise<void> {
-    return new Promise((resolve, reject) => {
+  loadAudio(result: TTSResult, itemId?: string): /*todo:convert*/ Promise<void> {
+    return new /*todo:convert*/ Promise((resolve, reject) => {
       if (!result.audioData) {
         reject(new Error('No audio data'));
         return;
@@ -150,7 +150,7 @@ export class PlaybackService implements OnDestroy {
    * Plays the audio for a given TTS result.
    * Stops any currently playing audio first.
    */
-  async playResult(result: TTSResult, itemId?: string): Promise<void> {
+  async playResult(result: TTSResult, itemId?: string): /*todo:convert*/ Promise<void> {
     try {
       await this.loadAudio(result, itemId);
       if (this.audio) {
@@ -199,7 +199,7 @@ export class PlaybackService implements OnDestroy {
   /**
    * Toggles play/pause for a specific TTS result or HistoryItem.
    */  
-  async togglePlayPause(itemOrResult?: HistoryItem | TTSResult | null, itemId?: string): Promise<void> {
+  async togglePlayPause(itemOrResult?: HistoryItem | TTSResult | null, itemId?: string): /*todo:convert*/ Promise<void> {
     // Log the call stack if itemId is undefined
     if (itemId === undefined) {
       // Keep this trace for debugging unexpected undefined itemIds
@@ -242,7 +242,7 @@ export class PlaybackService implements OnDestroy {
     try {
       // Wait for the audio to be ready before playing
       if (this.audio && this.audio.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
-        await new Promise<void>((resolve, reject) => {
+        await new /*todo:convert*/ Promise<void>((resolve, reject) => {
           if (!this.audio) { reject('Audio element not available during readyState wait'); return; }
           const onReady = () => {
             this.audio?.removeEventListener('canplaythrough', onReady);
@@ -277,8 +277,8 @@ export class PlaybackService implements OnDestroy {
   /**
    * Seeks to a specific time in the currently playing audio.
    */
-  seek(timeInSeconds: number): Promise<void> {
-    return new Promise((resolve) => {
+  seek(timeInSeconds: number): /*todo:convert*/ Promise<void> {
+    return new /*todo:convert*/ Promise((resolve) => {
       if (!isPlatformBrowser(this.platformId) || !this.audio) {
         resolve();
         return;
@@ -305,7 +305,7 @@ export class PlaybackService implements OnDestroy {
    * Seeks to a specific percentage of the audio duration.
    * @param percentage Number between 0 and 100
    */  
-  async seekToPercentage(percentage: number, shouldPlay?: boolean): Promise<void> {
+  async seekToPercentage(percentage: number, shouldPlay?: boolean): /*todo:convert*/ Promise<void> {
     if (!isPlatformBrowser(this.platformId) || !this.audio || this.audio.readyState < 1) { // Check readyState
       console.warn('Seek failed: Audio not ready');
       return;
@@ -325,7 +325,7 @@ export class PlaybackService implements OnDestroy {
     // Wait for both metadata and enough data to be loaded
     const waitForLoad = async () => {
       if (this.audio!.readyState < 1 || !this.audio!.duration) {
-        await new Promise(resolve => {
+        await new /*todo:convert*/ Promise(resolve => {
           const onLoadedMetadata = () => {
             this.audio!.removeEventListener('loadedmetadata', onLoadedMetadata);
             resolve(void 0);
@@ -335,7 +335,7 @@ export class PlaybackService implements OnDestroy {
       }
       
       if (this.audio!.readyState < 3) { // HAVE_FUTURE_DATA
-        await new Promise(resolve => {
+        await new /*todo:convert*/ Promise(resolve => {
           const onCanPlay = () => {
             this.audio!.removeEventListener('canplay', onCanPlay);
             resolve(void 0);

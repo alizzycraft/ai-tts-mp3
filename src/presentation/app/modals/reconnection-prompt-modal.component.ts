@@ -5,6 +5,9 @@ import { HISTORY_STORAGE_SERVICE } from '../../../integration/tokens/history-sto
 import { IHistoryStorageService } from '../../../integration/interfaces/services/history-storage.interface';
 import { FolderReconnectionPrompt } from '../../../integration/interfaces/models/folder-reconnection-prompt.interface';
 import { IReconnectionPromptModal } from '../../../integration/interfaces/components/reconnection-prompt-modal.interface';
+import { inject as injectAngular } from '@angular/core';
+import { StorageInitializationStateService } from '../../../infrastructure/storage/storage-initialization-state.service';
+import { FileSystemOperationsService } from '../../../infrastructure/storage/file-system-operations.service';
 
 @Component({
   selector: 'app-reconnection-prompt-modal',
@@ -81,6 +84,8 @@ export class ReconnectionPromptModalComponent implements IReconnectionPromptModa
 
   private readonly modalService = inject(MODAL_SERVICE);
   private readonly historyService = inject<IHistoryStorageService>(HISTORY_STORAGE_SERVICE);
+  private readonly initializationState = injectAngular(StorageInitializationStateService);
+  private readonly fileSystemOperations = injectAngular(FileSystemOperationsService);
   error = signal<string | null>(null);
   reconnecting = signal(false);
 
@@ -88,17 +93,17 @@ export class ReconnectionPromptModalComponent implements IReconnectionPromptModa
 
   async reconnect() {
     this.reconnecting.set(true);
-    this.error.set(null);
     try {
-      const result: { success: boolean; error?: string } = await this.historyService.enableFileSystemStorage();
-      if (result.success) {
-        this.modalService.close(true);
-      } else {
-        this.error.set(result.error || 'Failed to enable file system storage');
-      }
-    } catch (err: unknown) {
-      console.error('Error during reconnection:', err);
-      this.error.set(err instanceof Error ? err.message : 'Unexpected error during reconnection');
+      const handle = await this.fileSystemOperations.selectDirectory({
+        isReconnection: true,
+        previousPath: this.promptData.previousPath
+      });
+      // Notify the state machine of the selected handle (success)
+      this.initializationState.setReconnectionModalResult(true);
+      // Optionally, you could pass the handle via a service or signal if needed
+    } catch (error) {
+      // Notify the state machine of cancellation
+      this.initializationState.setReconnectionModalResult(false);
     } finally {
       this.reconnecting.set(false);
     }

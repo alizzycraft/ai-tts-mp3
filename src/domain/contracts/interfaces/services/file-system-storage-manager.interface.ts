@@ -2,8 +2,20 @@ import { FileSystemStorageState } from '../models/file-system-storage-sate.inter
 
 export interface IFileSystemStorageManagerService {
   fileSystemState: () => FileSystemStorageState;
-  initializeService(): Promise<void>;
-  enableFileSystemStorage(promptUser: boolean): Promise<{ success: boolean; error?: string }>;
-  disableFileSystemStorage(): Promise<boolean>;
-  handleFolderReconnection(accepted: boolean): Promise<void>;
+  /**
+   * Start initialization (signal-driven, no async/await)
+   */
+  startInitialization(): void;
+  /**
+   * Enable file system storage by selecting a directory
+   */
+  enableFileSystemStorage(isReconnection?: boolean): /*todo:convert*/ Promise<{ success: boolean; error?: string }>;
+  /**
+   * Disable file system storage
+   */
+  disableFileSystemStorage(): /*todo:convert*/ Promise<boolean>;
+  /**
+   * Handle folder reconnection prompt
+   */
+  handleFolderReconnection(accepted: boolean): /*todo:convert*/ Promise<void>;
 }

@@ -39,7 +39,7 @@ export function createExpressServer() {
         ]
       });
       
-      // Create a timeout promise
+      // Create a timeout Promise
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
           reject(new Error('SSR rendering timed out'));

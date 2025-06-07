@@ -97,33 +97,33 @@ export class HealthCheckService {
     this.logging.info('HealthCheckService initialized - Provider health checks will be performed manually', 'HealthCheck');
   }
 
-  async getHealthStatus(): Promise<HealthStatus> {
+  async getHealthStatus(): /*todo:convert*/ Promise<HealthStatus> {
     return this.healthStatus();
   }
 
-  async getProviderHealth(): Promise<ProviderHealthStatus[]> {
+  async getProviderHealth(): /*todo:convert*/ Promise<ProviderHealthStatus[]> {
     return this.providerHealth();
   }
 
   /**
    * Run system health checks excluding provider connectivity
    */
-  async runSystemHealthChecks(): Promise<void> {
+  async runSystemHealthChecks(): /*todo:convert*/ Promise<void> {
     if (!this.isBrowser) return;
 
-    const checkPromises = [
+    const check/*todo:convert*/ Promises = [
       this.checkLocalStorage(),
       this.checkMemoryUsage(),
       this.checkAudioSupport()
     ];
 
-    await Promise.allSettled(checkPromises);
+    await /*todo:convert*/ Promise.allSettled(check/*todo:convert*/ Promises);
   }
 
   /**
    * Test provider connectivity manually
    * This method is called by the UI when the user clicks "Test Connection"
-   */  async testProviderConnectivity(provider: ModelProvider): Promise<ProviderHealthStatus> {
+   */  async testProviderConnectivity(provider: ModelProvider): /*todo:convert*/ Promise<ProviderHealthStatus> {
     const startTime = Date.now();
     
     try {
@@ -187,7 +187,7 @@ export class HealthCheckService {
     }
   }
 
-  private async checkLocalStorage(): Promise<void> {
+  private async checkLocalStorage(): /*todo:convert*/ Promise<void> {
     const startTime = Date.now();
     const checkName = 'localStorage';
 
@@ -215,7 +215,7 @@ export class HealthCheckService {
     }
   }
 
-  private async checkMemoryUsage(): Promise<void> {
+  private async checkMemoryUsage(): /*todo:convert*/ Promise<void> {
     const startTime = Date.now();
     const checkName = 'memory';
 
@@ -264,7 +264,7 @@ export class HealthCheckService {
     }
   }
 
-  private async checkAudioSupport(): Promise<void> {
+  private async checkAudioSupport(): /*todo:convert*/ Promise<void> {
     const startTime = Date.now();
     const checkName = 'audio';
 

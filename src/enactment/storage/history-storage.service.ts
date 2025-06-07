@@ -71,7 +71,8 @@ export class IntegratedHistoryStorageService implements IHistoryStorageService {
     try {
       this.logging.debug('Initializing history storage services', 'History');
       // Initialize services in the right order
-      await this.fileSystemManager.initializeService();
+      // await this.fileSystemManager.initializeService();
+      await this.fileSystemManager.startInitialization();
       await this.historyManagement.loadHistory();
       this.initialized = true;
       this._historyLoaded.set(true);
@@ -123,7 +124,6 @@ export class IntegratedHistoryStorageService implements IHistoryStorageService {
     await this.ensureInitialized();
     await this.historyManagement.clearHistory();
   }
-
   // Additional history management methods - Delegate to infrastructure service
   async addToHistory(
     text: string,
@@ -174,7 +174,6 @@ export class IntegratedHistoryStorageService implements IHistoryStorageService {
       });
     }
   }
-
   // Enhanced history operations with monitoring
   async addToHistoryWithMonitoring(
     text: string,
