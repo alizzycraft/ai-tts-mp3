@@ -213,6 +213,19 @@ module.exports = tseslint.config(
       ],
     },
   },
+  // Relaxed rules for test files
+  {
+    files: ["**/*.spec.ts", "**/*.test.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off", // Allow 'any' in tests for mocking
+      "@typescript-eslint/no-unused-vars": "off", // Allow unused vars in tests during development
+      "@typescript-eslint/no-unsafe-argument": "off", // Allow unsafe arguments in test mocks
+      "@typescript-eslint/no-unsafe-assignment": "off", // Allow unsafe assignments in test setup
+      "@typescript-eslint/no-unsafe-member-access": "off", // Allow unsafe member access in mocks
+      "@typescript-eslint/no-unsafe-call": "off", // Allow unsafe calls in test utilities
+      "import/no-restricted-paths": "off", // Allow more flexible imports in tests
+    },
+  },
   {
     files: ["**/*.html"],
     extends: [

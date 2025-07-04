@@ -51,8 +51,7 @@
               "entry": "src/integration/bootstrap/startup/main.server.ts"
             }
           },         
-          "configurations": {            
-              "production": {
+          "configurations": {            "production": {
               "budgets": [
                 {
                   "type": "initial",
@@ -66,7 +65,7 @@
                 }
               ],
               "outputHashing": "all"
-            },            "spa": {
+            },"spa": {
               "budgets": [
                 {
                   "type": "initial",
@@ -105,11 +104,11 @@
         },
         "extract-i18n": {
           "builder": "@angular-devkit/build-angular:extract-i18n"
-        },
-        "test": {
+        },        "test": {
           "builder": "@angular-devkit/build-angular:karma",
           "options": {
             "polyfills": [
+              "src/test-setup.ts"
             ],
             "tsConfig": "tsconfig.spec.json",
             "inlineStyleLanguage": "scss",            "assets": [
